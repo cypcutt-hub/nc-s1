@@ -45,7 +45,7 @@ def upgrade() -> None:
         "algorithm_steps",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("parameter_code", sa.String(length=255), nullable=False),
-        sa.Column("severity_level", sa.String(length=255), nullable=False),
+        sa.Column("severity_level", sa.Integer(), nullable=False),
         sa.Column("step_value", sa.Float(), nullable=False),
         sa.Column("step_unit", sa.String(length=64), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
