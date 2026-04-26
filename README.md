@@ -15,6 +15,8 @@
 docker compose up --build
 ```
 
+`docker compose` использует сетевые настройки из `docker-compose.yml` (backend подключается к БД по хосту `postgres`).
+
 После запуска:
 
 - Backend: `http://localhost:8000`
@@ -63,6 +65,7 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
+# для локального запуска используйте localhost в DATABASE_URL из .env.example
 uvicorn app.main:app --reload
 ```
 
