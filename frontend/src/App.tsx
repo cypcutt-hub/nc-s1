@@ -270,6 +270,7 @@ export default function App() {
         iterations: [...currentSession.iterations, created],
       })
       setStepNumber((prev) => prev + 1)
+      setRecommendation(null)
       setMessage(`Iteration step ${created.step_number} added.`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to add iteration')
