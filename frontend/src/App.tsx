@@ -82,7 +82,7 @@ const MODE_KEYS: Array<keyof ModeVector> = [
   'nozzle',
 ]
 
-const DEFECT_OPTIONS = ['burr', 'dross', 'incomplete_cut', 'overburn', 'rough_edge']
+const DEFECT_OPTIONS = ['burr', 'no_cut', 'overburn']
 
 const DEFAULT_MODE: ModeVector = {
   power: 0,
@@ -226,6 +226,12 @@ export default function App() {
     try {
       const response = await fetch(`${API_BASE}/sessions/${currentSession.id}/recommend`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          defect_code: defectCode,
+          severity_level: defectSeverity,
+          current_mode: currentMode,
+        }),
       })
 
       if (!response.ok) {

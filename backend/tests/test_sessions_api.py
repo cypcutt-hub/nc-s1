@@ -95,6 +95,25 @@ def _iteration_payload(**overrides: float | int | str) -> dict:
     return payload
 
 
+def _recommend_payload(**overrides: float | int | str | dict[str, float]) -> dict:
+    payload = {
+        "defect_code": "no_cut",
+        "severity_level": 2,
+        "current_mode": {
+            "power": 980.0,
+            "speed": 11.5,
+            "frequency": 4800.0,
+            "pressure": 7.5,
+            "focus": 0.4,
+            "height": 1.1,
+            "duty_cycle": 62.0,
+            "nozzle": 1.6,
+        },
+    }
+    payload.update(overrides)
+    return payload
+
+
 def test_create_session(client: TestClient) -> None:
     response = client.post(
         "/sessions",
@@ -249,6 +268,69 @@ def test_recommendation_for_no_cut(client: TestClient) -> None:
     assert body["nozzle_after"] == 1.6
     assert "Base rule for no_cut: increase power, decrease speed" in body["explanation"]
     assert "Severity level 2 applied multiplier x1.5" in body["explanation"]
+
+
+def test_recommendation_on_empty_session_with_body(client: TestClient) -> None:
+    session = _create_session(client)
+
+    response = client.post(
+        f"/sessions/{session['id']}/recommend",
+        json=_recommend_payload(),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["power_after"] == pytest.approx(1053.5)
+    assert body["speed_after"] == pytest.approx(10.465)
+    assert body["frequency_after"] == 4800.0
+    assert body["pressure_after"] == 7.5
+    assert body["focus_after"] == 0.4
+    assert body["height_after"] == 1.1
+    assert body["duty_cycle_after"] == 62.0
+    assert body["nozzle_after"] == 1.6
+    assert "Base rule for no_cut: increase power, decrease speed" in body["explanation"]
+
+
+def test_recommendation_uses_provided_defect_and_severity(client: TestClient) -> None:
+    session = _create_session(client)
+    assert client.post(
+        f"/sessions/{session['id']}/iterations",
+        json=_iteration_payload(defect_code="burr", severity_level=1, power_after=1000.0, speed_after=12.0),
+    ).status_code == 201
+
+    response = client.post(
+        f"/sessions/{session['id']}/recommend",
+        json=_recommend_payload(
+            defect_code="overburn",
+            severity_level=3,
+            current_mode={
+                "power": 1000.0,
+                "speed": 12.0,
+                "frequency": 4800.0,
+                "pressure": 7.5,
+                "focus": 0.4,
+                "height": 1.1,
+                "duty_cycle": 62.0,
+                "nozzle": 1.6,
+            },
+        ),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["power_after"] == pytest.approx(800.0)
+    assert body["speed_after"] == 12.0
+    assert "Base rule for overburn: decrease power" in body["explanation"]
+    assert "Severity level 3 applied multiplier x2" in body["explanation"]
+
+
+def test_recommendation_without_body_requires_latest_iteration(client: TestClient) -> None:
+    session = _create_session(client)
+
+    response = client.post(f"/sessions/{session['id']}/recommend")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "session has no iterations"
 
 
 def test_recommendation_for_burr(client: TestClient) -> None:

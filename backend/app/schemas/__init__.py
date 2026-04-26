@@ -1,6 +1,8 @@
 from app.schemas.sessions import (
     CutIterationCreate,
     CutIterationRead,
+    ModeVector,
+    RecommendationRequest,
     CutSessionCreate,
     CutSessionRead,
     CutSessionReadWithIterations,
@@ -14,4 +16,6 @@ __all__ = [
     "CutIterationRead",
     "CutSessionReadWithIterations",
     "RecommendationRead",
+    "RecommendationRequest",
+    "ModeVector",
 ]
