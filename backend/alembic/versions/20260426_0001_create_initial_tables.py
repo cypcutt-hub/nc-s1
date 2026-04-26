@@ -55,7 +55,7 @@ def upgrade() -> None:
         sa.Column("cutting_height_mm", sa.Float(), nullable=False),
         sa.Column("duty_cycle_percent", sa.Float(), nullable=True),
         sa.Column("nozzle_diameter_mm", sa.Float(), nullable=False),
-        sa.Column("trust_level", sa.Float(), nullable=False),
+        sa.Column("trust_level", sa.Integer(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.ForeignKeyConstraint(["machine_id"], ["machines.id"]),
         sa.ForeignKeyConstraint(["material_id"], ["materials.id"]),

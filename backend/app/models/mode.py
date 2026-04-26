@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, Float, ForeignKey, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -23,7 +23,7 @@ class BaseMode(Base):
     cutting_height_mm: Mapped[float] = mapped_column(Float, nullable=False)
     duty_cycle_percent: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     nozzle_diameter_mm: Mapped[float] = mapped_column(Float, nullable=False)
-    trust_level: Mapped[float] = mapped_column(Float, nullable=False)
+    trust_level: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
