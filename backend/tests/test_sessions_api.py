@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 import app.main as main
 from app.db.base import Base
-from app.models import Defect
+from app.models import Defect, RecommendationRule
 
 
 @pytest.fixture()
@@ -42,6 +42,17 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]
                     gas_branch="N2",
                     is_critical=True,
                 ),
+                Defect(
+                    code="warp",
+                    name="Warp",
+                    gas_branch="N2",
+                    is_critical=False,
+                ),
+                RecommendationRule(defect_code="no_cut", parameter="power", direction="increase", base_delta=0.05, is_active=True),
+                RecommendationRule(defect_code="no_cut", parameter="speed", direction="decrease", base_delta=0.05, is_active=True),
+                RecommendationRule(defect_code="burr", parameter="power", direction="decrease", base_delta=0.05, is_active=True),
+                RecommendationRule(defect_code="burr", parameter="speed", direction="increase", base_delta=0.05, is_active=True),
+                RecommendationRule(defect_code="overburn", parameter="power", direction="decrease", base_delta=0.10, is_active=True),
             ]
         )
         db.commit()
@@ -266,7 +277,7 @@ def test_recommendation_for_no_cut(client: TestClient) -> None:
     assert body["height_after"] == 1.1
     assert body["duty_cycle_after"] == 62.0
     assert body["nozzle_after"] == 1.6
-    assert "Base rule for no_cut: increase power, decrease speed" in body["explanation"]
+    assert any("rule from DB" in line for line in body["explanation"])
     assert "Severity level 2 applied multiplier x1.5" in body["explanation"]
 
 
@@ -288,7 +299,7 @@ def test_recommendation_on_empty_session_with_body(client: TestClient) -> None:
     assert body["height_after"] == 1.1
     assert body["duty_cycle_after"] == 62.0
     assert body["nozzle_after"] == 1.6
-    assert "Base rule for no_cut: increase power, decrease speed" in body["explanation"]
+    assert any("rule from DB" in line for line in body["explanation"])
 
 
 def test_recommendation_uses_provided_defect_and_severity(client: TestClient) -> None:
@@ -320,7 +331,7 @@ def test_recommendation_uses_provided_defect_and_severity(client: TestClient) ->
     body = response.json()
     assert body["power_after"] == pytest.approx(800.0)
     assert body["speed_after"] == 12.0
-    assert "Base rule for overburn: decrease power" in body["explanation"]
+    assert "Applied power decrease (0.1) - rule from DB" in body["explanation"]
     assert "Severity level 3 applied multiplier x2" in body["explanation"]
 
 
@@ -448,3 +459,55 @@ def test_recommendation_empty_session_returns_error(client: TestClient) -> None:
     response = client.post(f"/sessions/{session['id']}/recommend")
 
     assert response.status_code == 400
+
+
+def test_recommendation_disabling_rule_changes_result(client: TestClient) -> None:
+    session = _create_session(client)
+    payload = _iteration_payload(defect_code="no_cut", severity_level=2, power_after=1000.0, speed_after=12.0)
+    assert client.post(f"/sessions/{session['id']}/iterations", json=payload).status_code == 201
+
+    before = client.post(f"/sessions/{session['id']}/recommend")
+    assert before.status_code == 200
+
+    with main.SessionLocal() as db:
+        speed_rule = (
+            db.query(RecommendationRule)
+            .filter(RecommendationRule.defect_code == "no_cut", RecommendationRule.parameter == "speed")
+            .first()
+        )
+        assert speed_rule is not None
+        speed_rule.is_active = False
+        db.commit()
+
+    after = client.post(f"/sessions/{session['id']}/recommend")
+    assert after.status_code == 200
+    assert before.json()["speed_after"] != after.json()["speed_after"]
+    assert after.json()["speed_after"] == payload["speed_after"]
+
+
+def test_recommendation_with_defect_without_rules_returns_unchanged_mode(client: TestClient) -> None:
+    session = _create_session(client)
+
+    response = client.post(
+        f"/sessions/{session['id']}/recommend",
+        json=_recommend_payload(defect_code="warp"),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["power_after"] == 980.0
+    assert body["speed_after"] == 11.5
+    assert body["frequency_after"] == 4800.0
+    assert "No active rules for defect warp; rule from DB not found" in body["explanation"]
+
+
+def test_recommendation_explanation_includes_db_reference(client: TestClient) -> None:
+    session = _create_session(client)
+    assert client.post(f"/sessions/{session['id']}/iterations", json=_iteration_payload()).status_code == 201
+
+    response = client.post(f"/sessions/{session['id']}/recommend")
+
+    assert response.status_code == 200
+    explanation = response.json()["explanation"]
+    assert any("rule from DB" in line for line in explanation)
+    assert any("Applied power increase" in line for line in explanation)

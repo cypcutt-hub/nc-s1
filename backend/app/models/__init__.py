@@ -6,6 +6,7 @@ from app.models.machine import Machine
 from app.models.material import Material
 from app.models.mode import BaseMode
 from app.models.nozzle import Nozzle
+from app.models.recommendation_rule import RecommendationRule
 
 __all__ = [
     "Material",
@@ -16,4 +17,5 @@ __all__ = [
     "AlgorithmStep",
     "CutSession",
     "CutIteration",
+    "RecommendationRule",
 ]
