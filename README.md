@@ -45,7 +45,7 @@ curl http://localhost:8000/db-health
 ## Alembic
 
 Alembic настроен в `backend/alembic/` и `backend/alembic.ini`.
-На этом этапе бизнес-таблицы не создаются.
+В БД уже добавлены базовые таблицы режимов (`materials`, `machines`, `base_modes`) и справочные таблицы алгоритма (`defects`, `nozzles`, `algorithm_steps`).
 
 Примеры команд:
 
