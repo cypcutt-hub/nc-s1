@@ -7,9 +7,20 @@
 - `backend/` — FastAPI (Python)
 - `frontend/` — React + TypeScript + Vite
 - `docs/` — документация
-- `docker-compose.yml` — минимальная конфигурация сервисов
+- `docker-compose.yml` — конфигурация запуска сервисов в Docker
 
-## Быстрый запуск локально
+## Быстрый запуск через Docker
+
+```bash
+docker compose up --build
+```
+
+После запуска:
+
+- Backend: `http://localhost:8000`
+- Frontend: `http://localhost:5173`
+
+## Быстрый запуск локально (без Docker)
 
 ### Backend
 
@@ -21,8 +32,6 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-Backend будет доступен на `http://localhost:8000`.
-
 ### Frontend
 
 ```bash
@@ -30,5 +39,3 @@ cd frontend
 npm install
 npm run dev
 ```
-
-Frontend будет доступен на `http://localhost:5173`.
