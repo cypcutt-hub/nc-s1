@@ -57,6 +57,17 @@ type ApiError = {
   detail?: string
 }
 
+type Recommendation = {
+  power_after: number
+  speed_after: number
+  frequency_after: number
+  pressure_after: number
+  focus_after: number
+  height_after: number
+  duty_cycle_after: number
+  nozzle_after: number
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE_PATH ?? '/api'
 
 const DEFAULT_MODE: ModeVector = {
@@ -89,6 +100,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [recommendation, setRecommendation] = useState<Recommendation | null>(null)
 
   const orderedIterations = useMemo(() => {
     if (!currentSession) return []
@@ -127,6 +139,7 @@ export default function App() {
       setCurrentSession(hydrated)
       setSessionIdInput(String(created.id))
       setStepNumber(1)
+      setRecommendation(null)
       setMessage(`Session #${created.id} created.`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create session')
@@ -153,10 +166,58 @@ export default function App() {
         ? Math.max(...data.iterations.map((item) => item.step_number)) + 1
         : 1
       setStepNumber(nextStep)
+      setRecommendation(null)
       setMessage(`Session #${data.id} loaded.`)
     } catch (e) {
       setCurrentSession(null)
       setError(e instanceof Error ? e.message : 'Failed to load session')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  async function getRecommendation() {
+    if (!currentSession) return
+
+    setIsLoading(true)
+    setError(null)
+    setMessage(null)
+
+    try {
+      const response = await fetch(`${API_BASE}/sessions/${currentSession.id}/recommend`, {
+        method: 'POST',
+      })
+
+      if (!response.ok) {
+        if (response.status === 400) {
+          const responseError = await readError(response)
+          if (responseError.includes('session has no iterations')) {
+            throw new Error('Cannot get recommendation: session has no iterations yet.')
+          }
+          throw new Error(`Cannot get recommendation: ${responseError}`)
+        }
+
+        if (response.status === 404) {
+          throw new Error('Cannot get recommendation: session not found (404).')
+        }
+
+        if (response.status === 422) {
+          throw new Error('Cannot get recommendation: invalid request data (422).')
+        }
+
+        throw new Error(await readError(response))
+      }
+
+      const data = (await response.json()) as Recommendation
+      setRecommendation(data)
+      setMessage('Recommendation loaded.')
+    } catch (e) {
+      if (e instanceof TypeError) {
+        setError('Network error while requesting recommendation. Please check your connection.')
+      } else {
+        setError(e instanceof Error ? e.message : 'Failed to get recommendation')
+      }
+      setRecommendation(null)
     } finally {
       setIsLoading(false)
     }
@@ -209,6 +270,7 @@ export default function App() {
         iterations: [...currentSession.iterations, created],
       })
       setStepNumber((prev) => prev + 1)
+      setRecommendation(null)
       setMessage(`Iteration step ${created.step_number} added.`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to add iteration')
@@ -392,6 +454,25 @@ export default function App() {
                 Add iteration
               </button>
             </form>
+          </section>
+
+          <section className="card">
+            <h2>Recommendation</h2>
+            <button type="button" onClick={getRecommendation} disabled={isLoading}>
+              Get recommendation / Получить рекомендацию
+            </button>
+            {recommendation && (
+              <ul>
+                <li>power_after: {recommendation.power_after}</li>
+                <li>speed_after: {recommendation.speed_after}</li>
+                <li>frequency_after: {recommendation.frequency_after}</li>
+                <li>pressure_after: {recommendation.pressure_after}</li>
+                <li>focus_after: {recommendation.focus_after}</li>
+                <li>height_after: {recommendation.height_after}</li>
+                <li>duty_cycle_after: {recommendation.duty_cycle_after}</li>
+                <li>nozzle_after: {recommendation.nozzle_after}</li>
+              </ul>
+            )}
           </section>
 
           <section className="card">
