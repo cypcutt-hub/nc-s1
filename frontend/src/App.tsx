@@ -57,7 +57,7 @@ type ApiError = {
   detail?: string
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+const API_BASE = import.meta.env.VITE_API_BASE_PATH ?? '/api'
 
 const DEFAULT_MODE: ModeVector = {
   power: 0,
@@ -81,7 +81,7 @@ export default function App() {
   const [currentSession, setCurrentSession] = useState<CutSession | null>(null)
 
   const [stepNumber, setStepNumber] = useState(1)
-  const [defectCode, setDefectCode] = useState('BURR')
+  const [defectCode, setDefectCode] = useState('burr')
   const [severityLevel, setSeverityLevel] = useState(1)
   const [beforeMode, setBeforeMode] = useState<ModeVector>(DEFAULT_MODE)
   const [afterMode, setAfterMode] = useState<ModeVector>(DEFAULT_MODE)
