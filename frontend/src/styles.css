@@ -72,6 +72,18 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.ghost {
+  background: #fff;
+  color: #1c2b3a;
+  border-color: #bfcad6;
+}
+
+.ghost.active {
+  border-color: #0f62fe;
+  color: #0f62fe;
+  font-weight: 600;
+}
+
 .alert {
   border-radius: 0.4rem;
   padding: 0.75rem;
@@ -91,6 +103,37 @@ button:disabled {
   margin: 0.5rem 0 0;
   font-size: 0.9rem;
   color: #0d6e38;
+}
+
+.session-meta {
+  margin-top: 0;
+  color: #4c5a68;
+}
+
+.mini-label {
+  margin: 0 0 0.4rem;
+  font-size: 0.9rem;
+}
+
+.muted {
+  color: #5d6b79;
+}
+
+.button-group {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.recommendation-box {
+  border: 1px dashed #b8c5d3;
+  border-radius: 0.4rem;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.recommendation-box h4 {
+  margin-bottom: 0.4rem;
 }
 
 .iterations article {

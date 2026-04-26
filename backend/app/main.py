@@ -10,9 +10,10 @@ from app.schemas import (
     CutSessionCreate,
     CutSessionRead,
     CutSessionReadWithIterations,
+    RecommendationRequest,
     RecommendationRead,
 )
-from app.services import build_recommendation_from_iteration
+from app.services import build_recommendation, build_recommendation_from_iteration
 
 app = FastAPI(title="NeuroCut API")
 
@@ -77,11 +78,25 @@ def add_iteration(session_id: int, payload: CutIterationCreate) -> CutIteration:
 
 
 @app.post("/sessions/{session_id}/recommend", response_model=RecommendationRead)
-def recommend_next_mode(session_id: int) -> RecommendationRead:
+def recommend_next_mode(
+    session_id: int, payload: RecommendationRequest | None = None
+) -> RecommendationRead:
     with SessionLocal() as db:
         session = db.get(CutSession, session_id)
         if session is None:
             raise HTTPException(status_code=404, detail="session not found")
+
+        if payload is not None:
+            defect = db.query(Defect).filter(Defect.code == payload.defect_code).first()
+            if defect is None:
+                raise HTTPException(status_code=400, detail="unknown defect_code")
+
+            return build_recommendation(
+                defect_code=payload.defect_code,
+                severity_level=payload.severity_level,
+                current_mode=payload.current_mode.model_dump(),
+                session=session,
+            )
 
         last_iteration = (
             db.query(CutIteration)

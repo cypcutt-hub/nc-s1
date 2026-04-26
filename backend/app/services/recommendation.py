@@ -56,22 +56,26 @@ def _context_multiplier(field_name: str, session: CutSession) -> float:
     return 1.0
 
 
-def build_recommendation_from_iteration(
-    iteration: CutIteration, session: CutSession
+def build_recommendation(
+    *,
+    defect_code: str,
+    severity_level: int,
+    current_mode: dict[str, float],
+    session: CutSession,
 ) -> RecommendationRead:
-    severity_multiplier = SEVERITY_MULTIPLIERS.get(iteration.severity_level, 1.0)
-    adjustments = DEFECT_RULES.get(iteration.defect_code, {})
+    severity_multiplier = SEVERITY_MULTIPLIERS.get(severity_level, 1.0)
+    adjustments = DEFECT_RULES.get(defect_code, {})
     explanation: list[str] = []
 
     recommended_values = {
-        "power_after": iteration.power_after,
-        "speed_after": iteration.speed_after,
-        "frequency_after": iteration.frequency_after,
-        "pressure_after": iteration.pressure_after,
-        "focus_after": iteration.focus_after,
-        "height_after": iteration.height_after,
-        "duty_cycle_after": iteration.duty_cycle_after,
-        "nozzle_after": iteration.nozzle_after,
+        "power_after": current_mode["power"],
+        "speed_after": current_mode["speed"],
+        "frequency_after": current_mode["frequency"],
+        "pressure_after": current_mode["pressure"],
+        "focus_after": current_mode["focus"],
+        "height_after": current_mode["height"],
+        "duty_cycle_after": current_mode["duty_cycle"],
+        "nozzle_after": current_mode["nozzle"],
     }
 
     if adjustments:
@@ -83,11 +87,11 @@ def build_recommendation_from_iteration(
             speed_direction = "increase" if adjustments["speed_after"] > 0 else "decrease"
             adjustment_parts.append(f"{speed_direction} speed")
         explanation.append(
-            f"Base rule for {iteration.defect_code}: {', '.join(adjustment_parts)}"
+            f"Base rule for {defect_code}: {', '.join(adjustment_parts)}"
         )
 
     explanation.append(
-        f"Severity level {iteration.severity_level} applied multiplier x{severity_multiplier:g}"
+        f"Severity level {severity_level} applied multiplier x{severity_multiplier:g}"
     )
 
     if session.thickness_mm > 5:
@@ -119,3 +123,24 @@ def build_recommendation_from_iteration(
         recommended_values[field_name] = adjusted_value
 
     return RecommendationRead(**recommended_values, explanation=explanation)
+
+
+def build_recommendation_from_iteration(
+    iteration: CutIteration, session: CutSession
+) -> RecommendationRead:
+    current_mode = {
+        "power": iteration.power_after,
+        "speed": iteration.speed_after,
+        "frequency": iteration.frequency_after,
+        "pressure": iteration.pressure_after,
+        "focus": iteration.focus_after,
+        "height": iteration.height_after,
+        "duty_cycle": iteration.duty_cycle_after,
+        "nozzle": iteration.nozzle_after,
+    }
+    return build_recommendation(
+        defect_code=iteration.defect_code,
+        severity_level=iteration.severity_level,
+        current_mode=current_mode,
+        session=session,
+    )

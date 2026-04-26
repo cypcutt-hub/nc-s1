@@ -89,3 +89,20 @@ class RecommendationRead(BaseModel):
     duty_cycle_after: float
     nozzle_after: float
     explanation: list[str]
+
+
+class ModeVector(BaseModel):
+    power: float
+    speed: float
+    frequency: float
+    pressure: float
+    focus: float
+    height: float
+    duty_cycle: float
+    nozzle: float
+
+
+class RecommendationRequest(BaseModel):
+    defect_code: str
+    severity_level: int = Field(ge=0, le=3)
+    current_mode: ModeVector
