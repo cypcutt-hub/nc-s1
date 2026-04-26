@@ -92,6 +92,7 @@ def recommend_next_mode(
                 raise HTTPException(status_code=400, detail="unknown defect_code")
 
             return build_recommendation(
+                db=db,
                 defect_code=payload.defect_code,
                 severity_level=payload.severity_level,
                 current_mode=payload.current_mode.model_dump(),
@@ -107,4 +108,4 @@ def recommend_next_mode(
         if last_iteration is None:
             raise HTTPException(status_code=400, detail="session has no iterations")
 
-        return build_recommendation_from_iteration(last_iteration, session)
+        return build_recommendation_from_iteration(last_iteration, session, db)

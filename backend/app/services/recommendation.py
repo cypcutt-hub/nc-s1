@@ -1,4 +1,6 @@
-from app.models import CutIteration, CutSession
+from sqlalchemy.orm import Session
+
+from app.models import CutIteration, CutSession, RecommendationRule
 from app.schemas import RecommendationRead
 
 SEVERITY_MULTIPLIERS = {
@@ -7,10 +9,9 @@ SEVERITY_MULTIPLIERS = {
     3: 2.0,
 }
 
-DEFECT_RULES = {
-    "no_cut": {"power_after": 5.0, "speed_after": -5.0},
-    "burr": {"power_after": -5.0, "speed_after": 5.0},
-    "overburn": {"power_after": -10.0},
+PARAMETER_TO_FIELDS = {
+    "power": "power_after",
+    "speed": "speed_after",
 }
 
 
@@ -56,15 +57,27 @@ def _context_multiplier(field_name: str, session: CutSession) -> float:
     return 1.0
 
 
+def _load_rules(db: Session, defect_code: str) -> list[RecommendationRule]:
+    return (
+        db.query(RecommendationRule)
+        .filter(
+            RecommendationRule.defect_code == defect_code,
+            RecommendationRule.is_active.is_(True),
+        )
+        .all()
+    )
+
+
 def build_recommendation(
     *,
+    db: Session,
     defect_code: str,
     severity_level: int,
     current_mode: dict[str, float],
     session: CutSession,
 ) -> RecommendationRead:
     severity_multiplier = SEVERITY_MULTIPLIERS.get(severity_level, 1.0)
-    adjustments = DEFECT_RULES.get(defect_code, {})
+    rules = _load_rules(db, defect_code)
     explanation: list[str] = []
 
     recommended_values = {
@@ -78,21 +91,13 @@ def build_recommendation(
         "nozzle_after": current_mode["nozzle"],
     }
 
-    if adjustments:
-        adjustment_parts = []
-        if "power_after" in adjustments:
-            power_direction = "increase" if adjustments["power_after"] > 0 else "decrease"
-            adjustment_parts.append(f"{power_direction} power")
-        if "speed_after" in adjustments:
-            speed_direction = "increase" if adjustments["speed_after"] > 0 else "decrease"
-            adjustment_parts.append(f"{speed_direction} speed")
-        explanation.append(
-            f"Base rule for {defect_code}: {', '.join(adjustment_parts)}"
-        )
-
     explanation.append(
         f"Severity level {severity_level} applied multiplier x{severity_multiplier:g}"
     )
+
+    if not rules:
+        explanation.append(f"No active rules for defect {defect_code}; rule from DB not found")
+        return RecommendationRead(**recommended_values, explanation=explanation)
 
     if session.thickness_mm > 5:
         explanation.append(
@@ -115,18 +120,27 @@ def build_recommendation(
     elif material_group == "stainless":
         explanation.append("Material stainless reduced power sensitivity")
 
-    for field_name, base_delta in adjustments.items():
+    for rule in rules:
+        field_name = PARAMETER_TO_FIELDS.get(rule.parameter)
+        if field_name is None:
+            continue
+
         base_value = recommended_values[field_name]
         context_multiplier = _context_multiplier(field_name, session)
-        final_delta = base_delta * severity_multiplier * context_multiplier
-        adjusted_value = base_value * (1 + final_delta / 100.0)
+        signed_delta = rule.base_delta if rule.direction == "increase" else -rule.base_delta
+        final_delta = signed_delta * severity_multiplier * context_multiplier
+        adjusted_value = base_value * (1 + final_delta)
         recommended_values[field_name] = adjusted_value
+
+        explanation.append(
+            f"Applied {rule.parameter} {rule.direction} ({rule.base_delta:g}) - rule from DB"
+        )
 
     return RecommendationRead(**recommended_values, explanation=explanation)
 
 
 def build_recommendation_from_iteration(
-    iteration: CutIteration, session: CutSession
+    iteration: CutIteration, session: CutSession, db: Session
 ) -> RecommendationRead:
     current_mode = {
         "power": iteration.power_after,
@@ -139,6 +153,7 @@ def build_recommendation_from_iteration(
         "nozzle": iteration.nozzle_after,
     }
     return build_recommendation(
+        db=db,
         defect_code=iteration.defect_code,
         severity_level=iteration.severity_level,
         current_mode=current_mode,
