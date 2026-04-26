@@ -88,3 +88,4 @@ class RecommendationRead(BaseModel):
     height_after: float
     duty_cycle_after: float
     nozzle_after: float
+    explanation: list[str]

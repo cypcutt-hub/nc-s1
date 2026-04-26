@@ -66,6 +66,7 @@ type Recommendation = {
   height_after: number
   duty_cycle_after: number
   nozzle_after: number
+  explanation: string[]
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE_PATH ?? '/api'
@@ -462,16 +463,24 @@ export default function App() {
               Get recommendation / Получить рекомендацию
             </button>
             {recommendation && (
-              <ul>
-                <li>power_after: {recommendation.power_after}</li>
-                <li>speed_after: {recommendation.speed_after}</li>
-                <li>frequency_after: {recommendation.frequency_after}</li>
-                <li>pressure_after: {recommendation.pressure_after}</li>
-                <li>focus_after: {recommendation.focus_after}</li>
-                <li>height_after: {recommendation.height_after}</li>
-                <li>duty_cycle_after: {recommendation.duty_cycle_after}</li>
-                <li>nozzle_after: {recommendation.nozzle_after}</li>
-              </ul>
+              <>
+                <ul>
+                  <li>power_after: {recommendation.power_after}</li>
+                  <li>speed_after: {recommendation.speed_after}</li>
+                  <li>frequency_after: {recommendation.frequency_after}</li>
+                  <li>pressure_after: {recommendation.pressure_after}</li>
+                  <li>focus_after: {recommendation.focus_after}</li>
+                  <li>height_after: {recommendation.height_after}</li>
+                  <li>duty_cycle_after: {recommendation.duty_cycle_after}</li>
+                  <li>nozzle_after: {recommendation.nozzle_after}</li>
+                </ul>
+                <h3>Why this recommendation</h3>
+                <ul>
+                  {recommendation.explanation.map((line, index) => (
+                    <li key={`${index}-${line}`}>{line}</li>
+                  ))}
+                </ul>
+              </>
             )}
           </section>
 
