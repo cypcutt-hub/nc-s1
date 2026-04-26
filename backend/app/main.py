@@ -92,4 +92,4 @@ def recommend_next_mode(session_id: int) -> RecommendationRead:
         if last_iteration is None:
             raise HTTPException(status_code=400, detail="session has no iterations")
 
-        return build_recommendation_from_iteration(last_iteration)
+        return build_recommendation_from_iteration(last_iteration, session)

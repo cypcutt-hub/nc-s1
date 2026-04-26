@@ -52,15 +52,17 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]
         yield test_client
 
 
-def _create_session(client: TestClient) -> dict:
+def _create_session(client: TestClient, **overrides: float | str) -> dict:
+    payload = {
+        "machine_name": "Machine A",
+        "material_group": "steel",
+        "thickness_mm": 2.5,
+        "gas_branch": "N2",
+    }
+    payload.update(overrides)
     response = client.post(
         "/sessions",
-        json={
-            "machine_name": "Machine A",
-            "material_group": "steel",
-            "thickness_mm": 2.5,
-            "gas_branch": "N2",
-        },
+        json=payload,
     )
 
     assert response.status_code == 201
@@ -238,7 +240,7 @@ def test_recommendation_for_no_cut(client: TestClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["power_after"] == pytest.approx(1053.5)
-    assert body["speed_after"] == pytest.approx(10.6375)
+    assert body["speed_after"] == pytest.approx(10.465)
     assert body["frequency_after"] == 4800.0
     assert body["focus_after"] == 0.4
     assert body["pressure_after"] == 7.5
@@ -257,7 +259,7 @@ def test_recommendation_for_burr(client: TestClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["power_after"] == pytest.approx(950.0)
-    assert body["speed_after"] == pytest.approx(12.6)
+    assert body["speed_after"] == pytest.approx(12.72)
     assert body["frequency_after"] == payload["frequency_after"]
     assert body["height_after"] == payload["height_after"]
     assert body["duty_cycle_after"] == payload["duty_cycle_after"]
@@ -277,6 +279,56 @@ def test_recommendation_respects_severity(client: TestClient) -> None:
     body = response.json()
     assert body["power_after"] == pytest.approx(800.0)
     assert body["frequency_after"] == second["frequency_after"]
+
+
+def test_recommendation_differs_with_thickness_context(client: TestClient) -> None:
+    thin_session = _create_session(client, thickness_mm=1.0)
+    thick_session = _create_session(client, thickness_mm=10.0)
+
+    payload = _iteration_payload(defect_code="no_cut", severity_level=2, power_after=1000.0, speed_after=12.0)
+    assert client.post(f"/sessions/{thin_session['id']}/iterations", json=payload).status_code == 201
+    assert client.post(f"/sessions/{thick_session['id']}/iterations", json=payload).status_code == 201
+
+    thin_recommend = client.post(f"/sessions/{thin_session['id']}/recommend")
+    thick_recommend = client.post(f"/sessions/{thick_session['id']}/recommend")
+
+    assert thin_recommend.status_code == 200
+    assert thick_recommend.status_code == 200
+    assert thin_recommend.json()["power_after"] != thick_recommend.json()["power_after"]
+    assert thin_recommend.json()["speed_after"] != thick_recommend.json()["speed_after"]
+
+
+def test_recommendation_differs_with_gas_branch_context(client: TestClient) -> None:
+    o2_session = _create_session(client, gas_branch="O2")
+    n2_session = _create_session(client, gas_branch="N2")
+
+    payload = _iteration_payload(defect_code="no_cut", severity_level=2, power_after=1000.0, speed_after=12.0)
+    assert client.post(f"/sessions/{o2_session['id']}/iterations", json=payload).status_code == 201
+    assert client.post(f"/sessions/{n2_session['id']}/iterations", json=payload).status_code == 201
+
+    o2_recommend = client.post(f"/sessions/{o2_session['id']}/recommend")
+    n2_recommend = client.post(f"/sessions/{n2_session['id']}/recommend")
+
+    assert o2_recommend.status_code == 200
+    assert n2_recommend.status_code == 200
+    assert o2_recommend.json()["power_after"] != n2_recommend.json()["power_after"]
+    assert o2_recommend.json()["speed_after"] != n2_recommend.json()["speed_after"]
+
+
+def test_recommendation_differs_with_material_group_context(client: TestClient) -> None:
+    stainless_session = _create_session(client, material_group="stainless")
+    carbon_session = _create_session(client, material_group="carbon")
+
+    payload = _iteration_payload(defect_code="overburn", severity_level=2, power_after=1000.0)
+    assert client.post(f"/sessions/{stainless_session['id']}/iterations", json=payload).status_code == 201
+    assert client.post(f"/sessions/{carbon_session['id']}/iterations", json=payload).status_code == 201
+
+    stainless_recommend = client.post(f"/sessions/{stainless_session['id']}/recommend")
+    carbon_recommend = client.post(f"/sessions/{carbon_session['id']}/recommend")
+
+    assert stainless_recommend.status_code == 200
+    assert carbon_recommend.status_code == 200
+    assert stainless_recommend.json()["power_after"] != carbon_recommend.json()["power_after"]
 
 
 def test_recommendation_empty_session_returns_error(client: TestClient) -> None:
