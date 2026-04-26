@@ -61,6 +61,7 @@ def build_recommendation_from_iteration(
 ) -> RecommendationRead:
     severity_multiplier = SEVERITY_MULTIPLIERS.get(iteration.severity_level, 1.0)
     adjustments = DEFECT_RULES.get(iteration.defect_code, {})
+    explanation: list[str] = []
 
     recommended_values = {
         "power_after": iteration.power_after,
@@ -73,6 +74,43 @@ def build_recommendation_from_iteration(
         "nozzle_after": iteration.nozzle_after,
     }
 
+    if adjustments:
+        adjustment_parts = []
+        if "power_after" in adjustments:
+            power_direction = "increase" if adjustments["power_after"] > 0 else "decrease"
+            adjustment_parts.append(f"{power_direction} power")
+        if "speed_after" in adjustments:
+            speed_direction = "increase" if adjustments["speed_after"] > 0 else "decrease"
+            adjustment_parts.append(f"{speed_direction} speed")
+        explanation.append(
+            f"Base rule for {iteration.defect_code}: {', '.join(adjustment_parts)}"
+        )
+
+    explanation.append(
+        f"Severity level {iteration.severity_level} applied multiplier x{severity_multiplier:g}"
+    )
+
+    if session.thickness_mm > 5:
+        explanation.append(
+            f"Thickness {session.thickness_mm:.1f} mm increased power impact and reduced speed impact"
+        )
+    elif session.thickness_mm < 2:
+        explanation.append(
+            f"Thickness {session.thickness_mm:.1f} mm reduced power impact"
+        )
+
+    gas_branch = session.gas_branch.strip().upper()
+    if gas_branch == "O2":
+        explanation.append("Gas O2 amplified power changes")
+    elif gas_branch == "N2":
+        explanation.append("Gas N2 increased speed sensitivity")
+
+    material_group = session.material_group.strip().lower()
+    if material_group == "carbon":
+        explanation.append("Material carbon increased power sensitivity")
+    elif material_group == "stainless":
+        explanation.append("Material stainless reduced power sensitivity")
+
     for field_name, base_delta in adjustments.items():
         base_value = recommended_values[field_name]
         context_multiplier = _context_multiplier(field_name, session)
@@ -80,4 +118,4 @@ def build_recommendation_from_iteration(
         adjusted_value = base_value * (1 + final_delta / 100.0)
         recommended_values[field_name] = adjusted_value
 
-    return RecommendationRead(**recommended_values)
+    return RecommendationRead(**recommended_values, explanation=explanation)

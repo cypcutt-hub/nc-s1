@@ -247,6 +247,8 @@ def test_recommendation_for_no_cut(client: TestClient) -> None:
     assert body["height_after"] == 1.1
     assert body["duty_cycle_after"] == 62.0
     assert body["nozzle_after"] == 1.6
+    assert "Base rule for no_cut: increase power, decrease speed" in body["explanation"]
+    assert "Severity level 2 applied multiplier x1.5" in body["explanation"]
 
 
 def test_recommendation_for_burr(client: TestClient) -> None:
@@ -296,6 +298,11 @@ def test_recommendation_differs_with_thickness_context(client: TestClient) -> No
     assert thick_recommend.status_code == 200
     assert thin_recommend.json()["power_after"] != thick_recommend.json()["power_after"]
     assert thin_recommend.json()["speed_after"] != thick_recommend.json()["speed_after"]
+    assert any("Thickness 1.0 mm reduced power impact" == line for line in thin_recommend.json()["explanation"])
+    assert any(
+        "Thickness 10.0 mm increased power impact and reduced speed impact" == line
+        for line in thick_recommend.json()["explanation"]
+    )
 
 
 def test_recommendation_differs_with_gas_branch_context(client: TestClient) -> None:
@@ -313,6 +320,8 @@ def test_recommendation_differs_with_gas_branch_context(client: TestClient) -> N
     assert n2_recommend.status_code == 200
     assert o2_recommend.json()["power_after"] != n2_recommend.json()["power_after"]
     assert o2_recommend.json()["speed_after"] != n2_recommend.json()["speed_after"]
+    assert "Gas O2 amplified power changes" in o2_recommend.json()["explanation"]
+    assert "Gas N2 increased speed sensitivity" in n2_recommend.json()["explanation"]
 
 
 def test_recommendation_differs_with_material_group_context(client: TestClient) -> None:
@@ -329,6 +338,26 @@ def test_recommendation_differs_with_material_group_context(client: TestClient) 
     assert stainless_recommend.status_code == 200
     assert carbon_recommend.status_code == 200
     assert stainless_recommend.json()["power_after"] != carbon_recommend.json()["power_after"]
+    assert "Material stainless reduced power sensitivity" in stainless_recommend.json()["explanation"]
+    assert "Material carbon increased power sensitivity" in carbon_recommend.json()["explanation"]
+
+
+def test_recommendation_explanation_changes_with_severity(client: TestClient) -> None:
+    low_session = _create_session(client)
+    high_session = _create_session(client)
+
+    low_payload = _iteration_payload(defect_code="no_cut", severity_level=1, power_after=1000.0, speed_after=12.0)
+    high_payload = _iteration_payload(defect_code="no_cut", severity_level=3, power_after=1000.0, speed_after=12.0)
+    assert client.post(f"/sessions/{low_session['id']}/iterations", json=low_payload).status_code == 201
+    assert client.post(f"/sessions/{high_session['id']}/iterations", json=high_payload).status_code == 201
+
+    low_recommend = client.post(f"/sessions/{low_session['id']}/recommend")
+    high_recommend = client.post(f"/sessions/{high_session['id']}/recommend")
+
+    assert low_recommend.status_code == 200
+    assert high_recommend.status_code == 200
+    assert "Severity level 1 applied multiplier x1" in low_recommend.json()["explanation"]
+    assert "Severity level 3 applied multiplier x2" in high_recommend.json()["explanation"]
 
 
 def test_recommendation_empty_session_returns_error(client: TestClient) -> None:
