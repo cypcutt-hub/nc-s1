@@ -102,6 +102,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null)
+  const [recommendationCopied, setRecommendationCopied] = useState(false)
 
   const orderedIterations = useMemo(() => {
     if (!currentSession) return []
@@ -183,6 +184,7 @@ export default function App() {
     setIsLoading(true)
     setError(null)
     setMessage(null)
+    setRecommendationCopied(false)
 
     try {
       const response = await fetch(`${API_BASE}/sessions/${currentSession.id}/recommend`, {
@@ -222,6 +224,22 @@ export default function App() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  function useRecommendation() {
+    if (!recommendation) return
+
+    setAfterMode({
+      power: recommendation.power_after,
+      speed: recommendation.speed_after,
+      frequency: recommendation.frequency_after,
+      pressure: recommendation.pressure_after,
+      focus: recommendation.focus_after,
+      height: recommendation.height_after,
+      duty_cycle: recommendation.duty_cycle_after,
+      nozzle: recommendation.nozzle_after,
+    })
+    setRecommendationCopied(true)
   }
 
   async function addIteration(event: FormEvent<HTMLFormElement>) {
@@ -272,6 +290,7 @@ export default function App() {
       })
       setStepNumber((prev) => prev + 1)
       setRecommendation(null)
+      setRecommendationCopied(false)
       setMessage(`Iteration step ${created.step_number} added.`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to add iteration')
@@ -474,6 +493,12 @@ export default function App() {
                   <li>duty_cycle_after: {recommendation.duty_cycle_after}</li>
                   <li>nozzle_after: {recommendation.nozzle_after}</li>
                 </ul>
+                <button type="button" onClick={useRecommendation} disabled={isLoading}>
+                  Use recommendation / Применить рекомендацию
+                </button>
+                {recommendationCopied && (
+                  <p className="inline-success">Recommendation copied to After values.</p>
+                )}
                 <h3>Why this recommendation</h3>
                 <ul>
                   {recommendation.explanation.map((line, index) => (

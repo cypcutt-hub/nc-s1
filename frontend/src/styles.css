@@ -87,6 +87,12 @@ button:disabled {
   color: #0d6e38;
 }
 
+.inline-success {
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+  color: #0d6e38;
+}
+
 .iterations article {
   border-top: 1px solid #e3e7ed;
   padding-top: 0.8rem;
