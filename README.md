@@ -51,6 +51,7 @@ Alembic настроен в `backend/alembic/` и `backend/alembic.ini`.
 
 ```bash
 cd backend
+# применить все миграции, включая cut_sessions / cut_iterations
 alembic upgrade head
 python -m app.db.seed
 ```
