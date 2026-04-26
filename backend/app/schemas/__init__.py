@@ -4,6 +4,7 @@ from app.schemas.sessions import (
     CutSessionCreate,
     CutSessionRead,
     CutSessionReadWithIterations,
+    RecommendationRead,
 )
 
 __all__ = [
@@ -12,4 +13,5 @@ __all__ = [
     "CutIterationCreate",
     "CutIterationRead",
     "CutSessionReadWithIterations",
+    "RecommendationRead",
 ]

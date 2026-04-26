@@ -77,3 +77,14 @@ class CutIterationRead(BaseModel):
 
 class CutSessionReadWithIterations(CutSessionRead):
     iterations: list[CutIterationRead]
+
+
+class RecommendationRead(BaseModel):
+    power_after: float
+    speed_after: float
+    frequency_after: float
+    pressure_after: float
+    focus_after: float
+    height_after: float
+    duty_cycle_after: float
+    nozzle_after: float
