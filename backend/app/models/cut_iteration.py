@@ -12,7 +12,7 @@ class CutIteration(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     session_id: Mapped[int] = mapped_column(ForeignKey("cut_sessions.id"), nullable=False)
     step_number: Mapped[int] = mapped_column(Integer, nullable=False)
-    defect_code: Mapped[str] = mapped_column(ForeignKey("defects.code"), String(255), nullable=False)
+    defect_code: Mapped[str] = mapped_column(String(255), ForeignKey("defects.code"), nullable=False)
     severity_level: Mapped[int] = mapped_column(Integer, nullable=False)
 
     power_before: Mapped[float] = mapped_column(Float, nullable=False)

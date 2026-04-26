@@ -28,21 +28,13 @@ class CutIterationCreate(BaseModel):
 
     power_before: float
     speed_before: float
-    frequency_before: float
     pressure_before: float
     focus_before: float
-    height_before: float
-    duty_cycle_before: float
-    nozzle_before: float
 
     power_after: float
     speed_after: float
-    frequency_after: float
     pressure_after: float
     focus_after: float
-    height_after: float
-    duty_cycle_after: float
-    nozzle_after: float
 
 
 class CutIterationRead(BaseModel):
@@ -56,24 +48,23 @@ class CutIterationRead(BaseModel):
 
     power_before: float
     speed_before: float
-    frequency_before: float
     pressure_before: float
     focus_before: float
-    height_before: float
-    duty_cycle_before: float
-    nozzle_before: float
 
     power_after: float
     speed_after: float
-    frequency_after: float
     pressure_after: float
     focus_after: float
-    height_after: float
-    duty_cycle_after: float
-    nozzle_after: float
 
     created_at: datetime
 
 
 class CutSessionReadWithIterations(CutSessionRead):
     iterations: list[CutIterationRead]
+
+
+class RecommendationRead(BaseModel):
+    power_after: float
+    speed_after: float
+    focus_after: float
+    pressure_after: float

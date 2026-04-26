@@ -22,13 +22,27 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]
     Base.metadata.create_all(bind=engine)
 
     with testing_session_local() as db:
-        db.add(
-            Defect(
+        db.add_all(
+            [
+                Defect(
                 code="no_cut",
                 name="No Cut",
                 gas_branch="N2",
                 is_critical=True,
-            )
+                ),
+                Defect(
+                    code="burr",
+                    name="Burr",
+                    gas_branch="N2",
+                    is_critical=False,
+                ),
+                Defect(
+                    code="overburn",
+                    name="Overburn",
+                    gas_branch="N2",
+                    is_critical=True,
+                ),
+            ]
         )
         db.commit()
 
@@ -60,20 +74,12 @@ def _iteration_payload(**overrides: float | int | str) -> dict:
         "severity_level": 2,
         "power_before": 1000.0,
         "speed_before": 12.0,
-        "frequency_before": 5000.0,
         "pressure_before": 8.0,
         "focus_before": 0.5,
-        "height_before": 1.2,
-        "duty_cycle_before": 65.0,
-        "nozzle_before": 1.6,
         "power_after": 980.0,
         "speed_after": 11.5,
-        "frequency_after": 4800.0,
         "pressure_after": 7.5,
         "focus_after": 0.4,
-        "height_after": 1.1,
-        "duty_cycle_after": 62.0,
-        "nozzle_after": 1.6,
     }
     payload.update(overrides)
     return payload
@@ -124,10 +130,8 @@ def test_add_iteration(client: TestClient) -> None:
     assert body["session_id"] == session["id"]
     assert body["defect_code"] == "no_cut"
     assert body["severity_level"] == 2
-    assert body["frequency_before"] == 5000.0
-    assert body["height_after"] == 1.1
-    assert body["duty_cycle_after"] == 62.0
-    assert body["nozzle_after"] == 1.6
+    assert body["power_before"] == 1000.0
+    assert body["focus_after"] == 0.4
 
 
 def test_read_session_with_iterations(client: TestClient) -> None:
@@ -139,18 +143,12 @@ def test_read_session_with_iterations(client: TestClient) -> None:
         severity_level=2,
         power_before=990.0,
         speed_before=11.8,
-        frequency_before=4900.0,
         pressure_before=7.8,
         focus_before=0.4,
-        height_before=1.1,
-        duty_cycle_before=63.0,
         power_after=970.0,
         speed_after=11.5,
-        frequency_after=4700.0,
         pressure_after=7.5,
         focus_after=0.3,
-        height_after=1.0,
-        duty_cycle_after=60.0,
     )
 
     assert client.post(f"/sessions/{session['id']}/iterations", json=first).status_code == 201
@@ -161,7 +159,7 @@ def test_read_session_with_iterations(client: TestClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert [iteration["step_number"] for iteration in body["iterations"]] == [1, 2]
-    assert body["iterations"][0]["frequency_after"] == 4700.0
+    assert body["iterations"][0]["power_after"] == 970.0
 
 
 def test_unknown_session_id_returns_404(client: TestClient) -> None:
@@ -213,3 +211,52 @@ def test_invalid_thickness_rejected(client: TestClient) -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_recommendation_for_no_cut(client: TestClient) -> None:
+    session = _create_session(client)
+    assert client.post(f"/sessions/{session['id']}/iterations", json=_iteration_payload()).status_code == 201
+
+    response = client.post(f"/sessions/{session['id']}/recommend")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["power_after"] == pytest.approx(1053.5)
+    assert body["speed_after"] == pytest.approx(10.6375)
+    assert body["focus_after"] == 0.4
+    assert body["pressure_after"] == 7.5
+
+
+def test_recommendation_for_burr(client: TestClient) -> None:
+    session = _create_session(client)
+    payload = _iteration_payload(defect_code="burr", severity_level=1, power_after=1000.0, speed_after=12.0)
+    assert client.post(f"/sessions/{session['id']}/iterations", json=payload).status_code == 201
+
+    response = client.post(f"/sessions/{session['id']}/recommend")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["power_after"] == pytest.approx(950.0)
+    assert body["speed_after"] == pytest.approx(12.6)
+
+
+def test_recommendation_respects_severity(client: TestClient) -> None:
+    session = _create_session(client)
+    first = _iteration_payload(step_number=1, defect_code="overburn", severity_level=1, power_after=1000.0)
+    second = _iteration_payload(step_number=2, defect_code="overburn", severity_level=3, power_after=1000.0)
+    assert client.post(f"/sessions/{session['id']}/iterations", json=first).status_code == 201
+    assert client.post(f"/sessions/{session['id']}/iterations", json=second).status_code == 201
+
+    response = client.post(f"/sessions/{session['id']}/recommend")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["power_after"] == pytest.approx(800.0)
+
+
+def test_recommendation_empty_session_returns_error(client: TestClient) -> None:
+    session = _create_session(client)
+
+    response = client.post(f"/sessions/{session['id']}/recommend")
+
+    assert response.status_code == 400
