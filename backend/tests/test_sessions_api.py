@@ -3,8 +3,8 @@ from collections.abc import Generator
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
-from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 import app.main as main
 from app.db.base import Base
@@ -18,10 +18,10 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    TestingSessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+    testing_session_local = sessionmaker(bind=engine, autocommit=False, autoflush=False)
     Base.metadata.create_all(bind=engine)
 
-    with TestingSessionLocal() as db:
+    with testing_session_local() as db:
         db.add(
             Defect(
                 code="no_cut",
@@ -32,7 +32,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]
         )
         db.commit()
 
-    monkeypatch.setattr(main, "SessionLocal", TestingSessionLocal)
+    monkeypatch.setattr(main, "SessionLocal", testing_session_local)
 
     with TestClient(main.app) as test_client:
         yield test_client
@@ -51,6 +51,32 @@ def _create_session(client: TestClient) -> dict:
 
     assert response.status_code == 201
     return response.json()
+
+
+def _iteration_payload(**overrides: float | int | str) -> dict:
+    payload = {
+        "step_number": 1,
+        "defect_code": "no_cut",
+        "severity_level": 2,
+        "power_before": 1000.0,
+        "speed_before": 12.0,
+        "frequency_before": 5000.0,
+        "pressure_before": 8.0,
+        "focus_before": 0.5,
+        "height_before": 1.2,
+        "duty_cycle_before": 65.0,
+        "nozzle_before": 1.6,
+        "power_after": 980.0,
+        "speed_after": 11.5,
+        "frequency_after": 4800.0,
+        "pressure_after": 7.5,
+        "focus_after": 0.4,
+        "height_after": 1.1,
+        "duty_cycle_after": 62.0,
+        "nozzle_after": 1.6,
+    }
+    payload.update(overrides)
+    return payload
 
 
 def test_create_session(client: TestClient) -> None:
@@ -89,19 +115,7 @@ def test_add_iteration(client: TestClient) -> None:
 
     response = client.post(
         f"/sessions/{session['id']}/iterations",
-        json={
-            "step_number": 1,
-            "defect_code": "no_cut",
-            "severity_level": 2,
-            "power_before": 1000.0,
-            "speed_before": 12.0,
-            "focus_before": 0.5,
-            "pressure_before": 8.0,
-            "power_after": 980.0,
-            "speed_after": 11.5,
-            "focus_after": 0.4,
-            "pressure_after": 7.5,
-        },
+        json=_iteration_payload(),
     )
 
     assert response.status_code == 201
@@ -110,37 +124,34 @@ def test_add_iteration(client: TestClient) -> None:
     assert body["session_id"] == session["id"]
     assert body["defect_code"] == "no_cut"
     assert body["severity_level"] == 2
+    assert body["frequency_before"] == 5000.0
+    assert body["height_after"] == 1.1
+    assert body["duty_cycle_after"] == 62.0
+    assert body["nozzle_after"] == 1.6
 
 
 def test_read_session_with_iterations(client: TestClient) -> None:
     session = _create_session(client)
 
-    first = {
-        "step_number": 2,
-        "defect_code": "no_cut",
-        "severity_level": 1,
-        "power_before": 1000.0,
-        "speed_before": 12.0,
-        "focus_before": 0.5,
-        "pressure_before": 8.0,
-        "power_after": 990.0,
-        "speed_after": 11.8,
-        "focus_after": 0.4,
-        "pressure_after": 7.8,
-    }
-    second = {
-        "step_number": 1,
-        "defect_code": "no_cut",
-        "severity_level": 2,
-        "power_before": 990.0,
-        "speed_before": 11.8,
-        "focus_before": 0.4,
-        "pressure_before": 7.8,
-        "power_after": 970.0,
-        "speed_after": 11.5,
-        "focus_after": 0.3,
-        "pressure_after": 7.5,
-    }
+    first = _iteration_payload(step_number=2, severity_level=1)
+    second = _iteration_payload(
+        step_number=1,
+        severity_level=2,
+        power_before=990.0,
+        speed_before=11.8,
+        frequency_before=4900.0,
+        pressure_before=7.8,
+        focus_before=0.4,
+        height_before=1.1,
+        duty_cycle_before=63.0,
+        power_after=970.0,
+        speed_after=11.5,
+        frequency_after=4700.0,
+        pressure_after=7.5,
+        focus_after=0.3,
+        height_after=1.0,
+        duty_cycle_after=60.0,
+    )
 
     assert client.post(f"/sessions/{session['id']}/iterations", json=first).status_code == 201
     assert client.post(f"/sessions/{session['id']}/iterations", json=second).status_code == 201
@@ -150,25 +161,14 @@ def test_read_session_with_iterations(client: TestClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert [iteration["step_number"] for iteration in body["iterations"]] == [1, 2]
+    assert body["iterations"][0]["frequency_after"] == 4700.0
 
 
 def test_unknown_session_id_returns_404(client: TestClient) -> None:
     get_response = client.get("/sessions/999")
     post_response = client.post(
         "/sessions/999/iterations",
-        json={
-            "step_number": 1,
-            "defect_code": "no_cut",
-            "severity_level": 2,
-            "power_before": 1000.0,
-            "speed_before": 12.0,
-            "focus_before": 0.5,
-            "pressure_before": 8.0,
-            "power_after": 980.0,
-            "speed_after": 11.5,
-            "focus_after": 0.4,
-            "pressure_after": 7.5,
-        },
+        json=_iteration_payload(),
     )
 
     assert get_response.status_code == 404
@@ -180,19 +180,7 @@ def test_unknown_defect_code_returns_client_error(client: TestClient) -> None:
 
     response = client.post(
         f"/sessions/{session['id']}/iterations",
-        json={
-            "step_number": 1,
-            "defect_code": "unknown_defect",
-            "severity_level": 2,
-            "power_before": 1000.0,
-            "speed_before": 12.0,
-            "focus_before": 0.5,
-            "pressure_before": 8.0,
-            "power_after": 980.0,
-            "speed_after": 11.5,
-            "focus_after": 0.4,
-            "pressure_after": 7.5,
-        },
+        json=_iteration_payload(defect_code="unknown_defect"),
     )
 
     assert response.status_code == 400
@@ -207,19 +195,7 @@ def test_invalid_severity_level_rejected(client: TestClient) -> None:
 
     response = client.post(
         f"/sessions/{session['id']}/iterations",
-        json={
-            "step_number": 1,
-            "defect_code": "no_cut",
-            "severity_level": 4,
-            "power_before": 1000.0,
-            "speed_before": 12.0,
-            "focus_before": 0.5,
-            "pressure_before": 8.0,
-            "power_after": 980.0,
-            "speed_after": 11.5,
-            "focus_after": 0.4,
-            "pressure_after": 7.5,
-        },
+        json=_iteration_payload(severity_level=4),
     )
 
     assert response.status_code == 422
