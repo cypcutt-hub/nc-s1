@@ -51,7 +51,6 @@ Alembic настроен в `backend/alembic/` и `backend/alembic.ini`.
 
 ```bash
 cd backend
-alembic revision -m "init"  # создаст пустую ревизию
 alembic upgrade head
 ```
 
