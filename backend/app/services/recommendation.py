@@ -21,8 +21,12 @@ def build_recommendation_from_iteration(iteration: CutIteration) -> Recommendati
     recommended_values = {
         "power_after": iteration.power_after,
         "speed_after": iteration.speed_after,
-        "focus_after": iteration.focus_after,
+        "frequency_after": iteration.frequency_after,
         "pressure_after": iteration.pressure_after,
+        "focus_after": iteration.focus_after,
+        "height_after": iteration.height_after,
+        "duty_cycle_after": iteration.duty_cycle_after,
+        "nozzle_after": iteration.nozzle_after,
     }
 
     for field_name, percent_delta in adjustments.items():

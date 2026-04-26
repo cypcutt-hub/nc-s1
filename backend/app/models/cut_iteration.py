@@ -17,13 +17,21 @@ class CutIteration(Base):
 
     power_before: Mapped[float] = mapped_column(Float, nullable=False)
     speed_before: Mapped[float] = mapped_column(Float, nullable=False)
+    frequency_before: Mapped[float] = mapped_column(Float, nullable=False)
     focus_before: Mapped[float] = mapped_column(Float, nullable=False)
     pressure_before: Mapped[float] = mapped_column(Float, nullable=False)
+    height_before: Mapped[float] = mapped_column(Float, nullable=False)
+    duty_cycle_before: Mapped[float] = mapped_column(Float, nullable=False)
+    nozzle_before: Mapped[float] = mapped_column(Float, nullable=False)
 
     power_after: Mapped[float] = mapped_column(Float, nullable=False)
     speed_after: Mapped[float] = mapped_column(Float, nullable=False)
+    frequency_after: Mapped[float] = mapped_column(Float, nullable=False)
     focus_after: Mapped[float] = mapped_column(Float, nullable=False)
     pressure_after: Mapped[float] = mapped_column(Float, nullable=False)
+    height_after: Mapped[float] = mapped_column(Float, nullable=False)
+    duty_cycle_after: Mapped[float] = mapped_column(Float, nullable=False)
+    nozzle_after: Mapped[float] = mapped_column(Float, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
