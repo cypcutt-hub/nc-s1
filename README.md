@@ -52,6 +52,7 @@ Alembic настроен в `backend/alembic/` и `backend/alembic.ini`.
 ```bash
 cd backend
 alembic upgrade head
+python -m app.db.seed
 ```
 
 ## Быстрый запуск локально (без Docker)
