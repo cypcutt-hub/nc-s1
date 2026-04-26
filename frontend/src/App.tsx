@@ -71,6 +71,19 @@ type Recommendation = {
 
 const API_BASE = import.meta.env.VITE_API_BASE_PATH ?? '/api'
 
+const MODE_KEYS: Array<keyof ModeVector> = [
+  'power',
+  'speed',
+  'frequency',
+  'pressure',
+  'focus',
+  'height',
+  'duty_cycle',
+  'nozzle',
+]
+
+const DEFECT_OPTIONS = ['burr', 'dross', 'incomplete_cut', 'overburn', 'rough_edge']
+
 const DEFAULT_MODE: ModeVector = {
   power: 0,
   speed: 0,
@@ -81,6 +94,8 @@ const DEFAULT_MODE: ModeVector = {
   duty_cycle: 0,
   nozzle: 0,
 }
+
+const emptyRecommendationMode = (): ModeVector => ({ ...DEFAULT_MODE })
 
 export default function App() {
   const [sessionForm, setSessionForm] = useState<CutSessionCreate>({
@@ -94,9 +109,11 @@ export default function App() {
 
   const [stepNumber, setStepNumber] = useState(1)
   const [defectCode, setDefectCode] = useState('burr')
-  const [severityLevel, setSeverityLevel] = useState(1)
-  const [beforeMode, setBeforeMode] = useState<ModeVector>(DEFAULT_MODE)
-  const [afterMode, setAfterMode] = useState<ModeVector>(DEFAULT_MODE)
+  const [defectSeverity, setDefectSeverity] = useState(1)
+  const [resultSeverity, setResultSeverity] = useState(1)
+
+  const [currentMode, setCurrentMode] = useState<ModeVector>(DEFAULT_MODE)
+  const [recommendedMode, setRecommendedMode] = useState<ModeVector>(DEFAULT_MODE)
 
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -108,6 +125,11 @@ export default function App() {
     if (!currentSession) return []
     return [...currentSession.iterations].sort((a, b) => a.step_number - b.step_number)
   }, [currentSession])
+
+  const recommendationDiff = useMemo(() => {
+    if (!recommendation) return []
+    return MODE_KEYS.filter((key) => currentMode[key] !== recommendedMode[key])
+  }, [currentMode, recommendedMode, recommendation])
 
   async function readError(response: Response): Promise<string> {
     try {
@@ -142,6 +164,7 @@ export default function App() {
       setSessionIdInput(String(created.id))
       setStepNumber(1)
       setRecommendation(null)
+      setRecommendationCopied(false)
       setMessage(`Session #${created.id} created.`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create session')
@@ -168,7 +191,21 @@ export default function App() {
         ? Math.max(...data.iterations.map((item) => item.step_number)) + 1
         : 1
       setStepNumber(nextStep)
+      if (data.iterations.length > 0) {
+        const last = data.iterations.sort((a, b) => b.step_number - a.step_number)[0]
+        setCurrentMode({
+          power: last.power_after,
+          speed: last.speed_after,
+          frequency: last.frequency_after,
+          pressure: last.pressure_after,
+          focus: last.focus_after,
+          height: last.height_after,
+          duty_cycle: last.duty_cycle_after,
+          nozzle: last.nozzle_after,
+        })
+      }
       setRecommendation(null)
+      setRecommendationCopied(false)
       setMessage(`Session #${data.id} loaded.`)
     } catch (e) {
       setCurrentSession(null)
@@ -192,44 +229,35 @@ export default function App() {
       })
 
       if (!response.ok) {
-        if (response.status === 400) {
-          const responseError = await readError(response)
-          if (responseError.includes('session has no iterations')) {
-            throw new Error('Cannot get recommendation: session has no iterations yet.')
-          }
-          throw new Error(`Cannot get recommendation: ${responseError}`)
-        }
-
-        if (response.status === 404) {
-          throw new Error('Cannot get recommendation: session not found (404).')
-        }
-
-        if (response.status === 422) {
-          throw new Error('Cannot get recommendation: invalid request data (422).')
-        }
-
         throw new Error(await readError(response))
       }
 
       const data = (await response.json()) as Recommendation
-      setRecommendation(data)
-      setMessage('Recommendation loaded.')
-    } catch (e) {
-      if (e instanceof TypeError) {
-        setError('Network error while requesting recommendation. Please check your connection.')
-      } else {
-        setError(e instanceof Error ? e.message : 'Failed to get recommendation')
+      const newMode = {
+        power: data.power_after,
+        speed: data.speed_after,
+        frequency: data.frequency_after,
+        pressure: data.pressure_after,
+        focus: data.focus_after,
+        height: data.height_after,
+        duty_cycle: data.duty_cycle_after,
+        nozzle: data.nozzle_after,
       }
+      setRecommendedMode(newMode)
+      setRecommendation(data)
+      setMessage(`Recommendation ready for defect "${defectCode}" (severity ${defectSeverity}).`)
+    } catch (e) {
       setRecommendation(null)
+      setRecommendedMode(emptyRecommendationMode())
+      setError(e instanceof Error ? e.message : 'Failed to get recommendation')
     } finally {
       setIsLoading(false)
     }
   }
 
-  function useRecommendation() {
+  function copyRecommendationToAfter() {
     if (!recommendation) return
-
-    setAfterMode({
+    setRecommendedMode({
       power: recommendation.power_after,
       speed: recommendation.speed_after,
       frequency: recommendation.frequency_after,
@@ -242,9 +270,8 @@ export default function App() {
     setRecommendationCopied(true)
   }
 
-  async function addIteration(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!currentSession) return
+  async function confirmTestResult() {
+    if (!currentSession || !recommendation) return
 
     setIsLoading(true)
     setError(null)
@@ -254,23 +281,23 @@ export default function App() {
       const payload = {
         step_number: stepNumber,
         defect_code: defectCode,
-        severity_level: severityLevel,
-        power_before: beforeMode.power,
-        speed_before: beforeMode.speed,
-        frequency_before: beforeMode.frequency,
-        pressure_before: beforeMode.pressure,
-        focus_before: beforeMode.focus,
-        height_before: beforeMode.height,
-        duty_cycle_before: beforeMode.duty_cycle,
-        nozzle_before: beforeMode.nozzle,
-        power_after: afterMode.power,
-        speed_after: afterMode.speed,
-        frequency_after: afterMode.frequency,
-        pressure_after: afterMode.pressure,
-        focus_after: afterMode.focus,
-        height_after: afterMode.height,
-        duty_cycle_after: afterMode.duty_cycle,
-        nozzle_after: afterMode.nozzle,
+        severity_level: resultSeverity,
+        power_before: currentMode.power,
+        speed_before: currentMode.speed,
+        frequency_before: currentMode.frequency,
+        pressure_before: currentMode.pressure,
+        focus_before: currentMode.focus,
+        height_before: currentMode.height,
+        duty_cycle_before: currentMode.duty_cycle,
+        nozzle_before: currentMode.nozzle,
+        power_after: recommendedMode.power,
+        speed_after: recommendedMode.speed,
+        frequency_after: recommendedMode.frequency,
+        pressure_after: recommendedMode.pressure,
+        focus_after: recommendedMode.focus,
+        height_after: recommendedMode.height,
+        duty_cycle_after: recommendedMode.duty_cycle,
+        nozzle_after: recommendedMode.nozzle,
       }
 
       const response = await fetch(`${API_BASE}/sessions/${currentSession.id}/iterations`, {
@@ -289,11 +316,12 @@ export default function App() {
         iterations: [...currentSession.iterations, created],
       })
       setStepNumber((prev) => prev + 1)
+      setCurrentMode({ ...recommendedMode })
       setRecommendation(null)
       setRecommendationCopied(false)
-      setMessage(`Iteration step ${created.step_number} added.`)
+      setMessage(`Test result saved. Step ${created.step_number} recorded.`)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to add iteration')
+      setError(e instanceof Error ? e.message : 'Failed to save test result')
     } finally {
       setIsLoading(false)
     }
@@ -310,8 +338,8 @@ export default function App() {
 
   return (
     <main className="page">
-      <h1>Cut Sessions</h1>
-      <p className="subtitle">Manual tester for Session API endpoints.</p>
+      <h1>NeuroCut Operator Tuning</h1>
+      <p className="subtitle">Session API demo: recommendation loop for manual shop-floor tuning.</p>
 
       {error && <p className="alert error">Error: {error}</p>}
       {message && <p className="alert success">{message}</p>}
@@ -382,131 +410,128 @@ export default function App() {
       {currentSession && (
         <>
           <section className="card">
-            <h2>Session details</h2>
-            <ul>
-              <li>ID: {currentSession.id}</li>
-              <li>Created at: {new Date(currentSession.created_at).toLocaleString()}</li>
-              <li>Machine: {currentSession.machine_name}</li>
-              <li>Material: {currentSession.material_group}</li>
-              <li>Thickness: {currentSession.thickness_mm}</li>
-              <li>Gas branch: {currentSession.gas_branch}</li>
-            </ul>
-          </section>
+            <h2>Operator workflow</h2>
+            <p className="session-meta">
+              Session #{currentSession.id} · Step {stepNumber} · Machine {currentSession.machine_name}
+            </p>
 
-          <section className="card">
-            <h2>Add iteration</h2>
-            <form onSubmit={addIteration} className="grid two-col">
-              <label>
-                Step number
-                <input
-                  type="number"
-                  min="1"
-                  value={stepNumber}
-                  onChange={(event) => setStepNumber(Number(event.target.value))}
-                  required
-                />
-              </label>
+            <h3>A) Current mode</h3>
+            <div className="grid two-col">
+              {MODE_KEYS.map((key) => (
+                <label key={`current-${key}`}>
+                  {key}
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={currentMode[key]}
+                    onChange={(event) => updateMode(setCurrentMode, currentMode, key, event.target.value)}
+                  />
+                </label>
+              ))}
+            </div>
+
+            <h3>B) Defect and severity</h3>
+            <div className="grid two-col">
               <label>
                 Defect code
                 <input
+                  list="defect-codes"
                   value={defectCode}
                   onChange={(event) => setDefectCode(event.target.value)}
-                  required
                 />
+                <datalist id="defect-codes">
+                  {DEFECT_OPTIONS.map((item) => (
+                    <option key={item} value={item} />
+                  ))}
+                </datalist>
               </label>
-              <label>
-                Severity level (0-3)
-                <input
-                  type="number"
-                  min="0"
-                  max="3"
-                  value={severityLevel}
-                  onChange={(event) => setSeverityLevel(Number(event.target.value))}
-                  required
-                />
-              </label>
+              <div>
+                <p className="mini-label">Observed severity</p>
+                <div className="button-group">
+                  {[1, 2, 3].map((value) => (
+                    <button
+                      key={`defect-${value}`}
+                      type="button"
+                      className={defectSeverity === value ? 'ghost active' : 'ghost'}
+                      onClick={() => setDefectSeverity(value)}
+                    >
+                      {value}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
 
-              <h3>Before</h3>
-              <div />
-              {Object.keys(DEFAULT_MODE).map((key) => (
-                <label key={`before-${key}`}>
-                  {key}
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={beforeMode[key as keyof ModeVector]}
-                    onChange={(event) =>
-                      updateMode(
-                        setBeforeMode,
-                        beforeMode,
-                        key as keyof ModeVector,
-                        event.target.value,
-                      )
-                    }
-                    required
-                  />
-                </label>
-              ))}
-
-              <h3>After</h3>
-              <div />
-              {Object.keys(DEFAULT_MODE).map((key) => (
-                <label key={`after-${key}`}>
-                  {key}
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={afterMode[key as keyof ModeVector]}
-                    onChange={(event) =>
-                      updateMode(
-                        setAfterMode,
-                        afterMode,
-                        key as keyof ModeVector,
-                        event.target.value,
-                      )
-                    }
-                    required
-                  />
-                </label>
-              ))}
-
-              <button type="submit" disabled={isLoading}>
-                Add iteration
-              </button>
-            </form>
-          </section>
-
-          <section className="card">
-            <h2>Recommendation</h2>
             <button type="button" onClick={getRecommendation} disabled={isLoading}>
-              Get recommendation / Получить рекомендацию
+              Get recommendation
             </button>
-            {recommendation && (
-              <>
+
+            <h3>C) Next step recommendation</h3>
+            {!recommendation ? (
+              <p className="muted">No recommendation yet. Click “Get recommendation”.</p>
+            ) : (
+              <div className="recommendation-box">
+                <p>
+                  Changed parameters:{' '}
+                  {recommendationDiff.length > 0 ? recommendationDiff.join(', ') : 'none (same as current mode)'}
+                </p>
                 <ul>
-                  <li>power_after: {recommendation.power_after}</li>
-                  <li>speed_after: {recommendation.speed_after}</li>
-                  <li>frequency_after: {recommendation.frequency_after}</li>
-                  <li>pressure_after: {recommendation.pressure_after}</li>
-                  <li>focus_after: {recommendation.focus_after}</li>
-                  <li>height_after: {recommendation.height_after}</li>
-                  <li>duty_cycle_after: {recommendation.duty_cycle_after}</li>
-                  <li>nozzle_after: {recommendation.nozzle_after}</li>
+                  {MODE_KEYS.map((key) => (
+                    <li key={`diff-${key}`}>
+                      {key}: {currentMode[key]} → {recommendedMode[key]}
+                    </li>
+                  ))}
                 </ul>
-                <button type="button" onClick={useRecommendation} disabled={isLoading}>
-                  Use recommendation / Применить рекомендацию
-                </button>
-                {recommendationCopied && (
-                  <p className="inline-success">Recommendation copied to After values.</p>
-                )}
-                <h3>Why this recommendation</h3>
+                <h4>Explanation</h4>
                 <ul>
                   {recommendation.explanation.map((line, index) => (
                     <li key={`${index}-${line}`}>{line}</li>
                   ))}
                 </ul>
-              </>
+                <button type="button" onClick={copyRecommendationToAfter} disabled={isLoading}>
+                  Copy recommended mode
+                </button>
+                {recommendationCopied && (
+                  <p className="inline-success">Recommended mode copied for manual machine transfer.</p>
+                )}
+              </div>
             )}
+
+            <h3>D) Test cut result</h3>
+            <p className="muted">Operator runs test cut on machine manually, then confirms the result below.</p>
+            <div className="button-group">
+              <button
+                type="button"
+                className={resultSeverity === 0 ? 'ghost active' : 'ghost'}
+                onClick={() => setResultSeverity(0)}
+              >
+                0 fixed
+              </button>
+              <button
+                type="button"
+                className={resultSeverity === 1 ? 'ghost active' : 'ghost'}
+                onClick={() => setResultSeverity(1)}
+              >
+                1 weak
+              </button>
+              <button
+                type="button"
+                className={resultSeverity === 2 ? 'ghost active' : 'ghost'}
+                onClick={() => setResultSeverity(2)}
+              >
+                2 medium
+              </button>
+              <button
+                type="button"
+                className={resultSeverity === 3 ? 'ghost active' : 'ghost'}
+                onClick={() => setResultSeverity(3)}
+              >
+                3 strong
+              </button>
+            </div>
+            <button type="button" onClick={confirmTestResult} disabled={isLoading || !recommendation}>
+              Confirm test result
+            </button>
           </section>
 
           <section className="card">
