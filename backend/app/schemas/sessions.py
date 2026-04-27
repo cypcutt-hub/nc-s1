@@ -17,6 +17,11 @@ class DictionaryItem(BaseModel):
     label: str
 
 
+class NumericDictionaryItem(BaseModel):
+    value: float
+    label: str
+
+
 class CutSessionRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

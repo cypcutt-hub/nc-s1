@@ -5,6 +5,10 @@ const proxyTarget = process.env.VITE_PROXY_TARGET ?? 'http://localhost:8000'
 
 export default defineConfig({
   plugins: [react()],
+  test: {
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.ts',
+  },
   server: {
     proxy: {
       '/api': {
