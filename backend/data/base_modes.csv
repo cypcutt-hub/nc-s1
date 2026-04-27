@@ -1,0 +1,2 @@
+machine_name,material_group,gas_branch,thickness_mm,power,speed,frequency,pressure,focus,height,duty_cycle,nozzle
+LaserCell-3015,carbon_steel,O2,3.0,85,2.4,0,0.8,-0.5,0.8,100,1.2
