@@ -104,6 +104,18 @@ class ModeVector(BaseModel):
     nozzle: float
 
 
+class BaseModeRead(BaseModel):
+    power: float
+    speed: float
+    frequency: float
+    pressure: float
+    focus: float
+    height: float
+    duty_cycle: float
+    nozzle: float
+    explanation: str
+
+
 class RecommendationRequest(BaseModel):
     defect_code: str
     severity_level: int = Field(ge=0, le=3)
