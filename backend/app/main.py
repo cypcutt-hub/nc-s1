@@ -12,6 +12,7 @@ from app.models import (
     RecommendationRule,
 )
 from app.schemas import (
+    DictionaryItem,
     CutIterationCreate,
     CutIterationRead,
     BaseModeRead,
@@ -28,6 +29,28 @@ from app.services import build_recommendation, build_recommendation_from_iterati
 
 app = FastAPI(title="NeuroCut API")
 
+MACHINE_DICTIONARY = [
+    DictionaryItem(
+        value="HSG_3kW_150mm_VSX_NC30E",
+        label="HSG 3 кВт, линза 150 мм, голова VSX NC30E",
+    )
+]
+MATERIAL_DICTIONARY = [
+    DictionaryItem(value="carbon", label="Углеродистая сталь"),
+    DictionaryItem(value="stainless", label="Нержавеющая сталь"),
+    DictionaryItem(value="aluminum", label="Алюминий"),
+]
+GAS_DICTIONARY = [
+    DictionaryItem(value="O2", label="Кислород O2"),
+    DictionaryItem(value="N2", label="Азот N2"),
+    DictionaryItem(value="air", label="Воздух"),
+]
+DEFECT_DICTIONARY = [
+    DictionaryItem(value="burr", label="Грат снизу"),
+    DictionaryItem(value="no_cut", label="Непрорез"),
+    DictionaryItem(value="overburn", label="Пережог / оплавление"),
+]
+
 
 @app.get("/health")
 def health_check() -> dict[str, str]:
@@ -42,6 +65,26 @@ def db_health_check() -> dict[str, str]:
         return {"status": "ok"}
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=503, detail="database unavailable") from exc
+
+
+@app.get("/dictionaries/machines", response_model=list[DictionaryItem])
+def list_machines() -> list[DictionaryItem]:
+    return MACHINE_DICTIONARY
+
+
+@app.get("/dictionaries/materials", response_model=list[DictionaryItem])
+def list_materials() -> list[DictionaryItem]:
+    return MATERIAL_DICTIONARY
+
+
+@app.get("/dictionaries/gases", response_model=list[DictionaryItem])
+def list_gases() -> list[DictionaryItem]:
+    return GAS_DICTIONARY
+
+
+@app.get("/dictionaries/defects", response_model=list[DictionaryItem])
+def list_defects() -> list[DictionaryItem]:
+    return DEFECT_DICTIONARY
 
 
 @app.post("/sessions", response_model=CutSessionRead, status_code=201)
@@ -98,7 +141,7 @@ def get_base_mode(session_id: int) -> BaseModeRead:
                 height=exact_mode.cutting_height_mm,
                 duty_cycle=exact_mode.duty_cycle_percent or 0.0,
                 nozzle=exact_mode.nozzle_diameter_mm,
-                explanation="Exact match used",
+                explanation="Использовано точное совпадение",
             )
 
         nearest_mode = (
@@ -133,8 +176,8 @@ def get_base_mode(session_id: int) -> BaseModeRead:
             duty_cycle=nearest_mode.duty_cycle_percent or 0.0,
             nozzle=nearest_mode.nozzle_diameter_mm,
             explanation=(
-                f"Nearest thickness {nearest_mode.thickness_mm:g} used instead of "
-                f"{session.thickness_mm:g}"
+                f"Использована ближайшая толщина {nearest_mode.thickness_mm:g} мм вместо "
+                f"{session.thickness_mm:g} мм"
             ),
         )
 

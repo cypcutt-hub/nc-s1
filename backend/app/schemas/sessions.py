@@ -12,6 +12,11 @@ class CutSessionCreate(BaseModel):
     gas_branch: str
 
 
+class DictionaryItem(BaseModel):
+    value: str
+    label: str
+
+
 class CutSessionRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
