@@ -1,4 +1,5 @@
 from app.schemas.sessions import (
+    DictionaryItem,
     CutIterationCreate,
     CutIterationRead,
     BaseModeRead,
@@ -14,6 +15,7 @@ from app.schemas.sessions import (
 )
 
 __all__ = [
+    "DictionaryItem",
     "CutSessionCreate",
     "CutSessionRead",
     "CutIterationCreate",
