@@ -256,14 +256,62 @@ def test_list_thicknesses_dictionary(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.json() == [
-        {"value": 1.0, "label": "1 мм"},
-        {"value": 2.0, "label": "2 мм"},
-        {"value": 3.0, "label": "3 мм"},
-        {"value": 4.0, "label": "4 мм"},
-        {"value": 5.0, "label": "5 мм"},
-        {"value": 6.0, "label": "6 мм"},
-        {"value": 8.0, "label": "8 мм"},
-        {"value": 10.0, "label": "10 мм"},
+        {
+            "value": 1.0,
+            "label": "1 мм",
+            "max_thickness_mm": 10.0,
+            "hot_block_threshold_mm": 8.0,
+            "is_hot_block_zone": False,
+        },
+        {
+            "value": 2.0,
+            "label": "2 мм",
+            "max_thickness_mm": 10.0,
+            "hot_block_threshold_mm": 8.0,
+            "is_hot_block_zone": False,
+        },
+        {
+            "value": 3.0,
+            "label": "3 мм",
+            "max_thickness_mm": 10.0,
+            "hot_block_threshold_mm": 8.0,
+            "is_hot_block_zone": False,
+        },
+        {
+            "value": 4.0,
+            "label": "4 мм",
+            "max_thickness_mm": 10.0,
+            "hot_block_threshold_mm": 8.0,
+            "is_hot_block_zone": False,
+        },
+        {
+            "value": 5.0,
+            "label": "5 мм",
+            "max_thickness_mm": 10.0,
+            "hot_block_threshold_mm": 8.0,
+            "is_hot_block_zone": False,
+        },
+        {
+            "value": 6.0,
+            "label": "6 мм",
+            "max_thickness_mm": 10.0,
+            "hot_block_threshold_mm": 8.0,
+            "is_hot_block_zone": False,
+        },
+        {
+            "value": 8.0,
+            "label": "8 мм",
+            "max_thickness_mm": 10.0,
+            "hot_block_threshold_mm": 8.0,
+            "is_hot_block_zone": True,
+        },
+        {
+            "value": 10.0,
+            "label": "10 мм",
+            "max_thickness_mm": 10.0,
+            "hot_block_threshold_mm": 8.0,
+            "is_hot_block_zone": True,
+        },
     ]
 
 

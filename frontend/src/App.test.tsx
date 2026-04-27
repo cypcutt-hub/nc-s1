@@ -46,8 +46,20 @@ function setupFetchMock() {
       if (url.includes('gas_branch=N2')) {
         return new Response(
           JSON.stringify([
-            { value: 1, label: '1 мм' },
-            { value: 2, label: '2 мм' },
+            {
+              value: 1,
+              label: '1 мм',
+              max_thickness_mm: 10,
+              hot_block_threshold_mm: 8,
+              is_hot_block_zone: false,
+            },
+            {
+              value: 2,
+              label: '2 мм',
+              max_thickness_mm: 10,
+              hot_block_threshold_mm: 8,
+              is_hot_block_zone: false,
+            },
           ]),
           { status: 200 },
         )
@@ -55,8 +67,20 @@ function setupFetchMock() {
       if (url.includes('gas_branch=air')) {
         return new Response(
           JSON.stringify([
-            { value: 4, label: '4 мм' },
-            { value: 5, label: '5 мм' },
+            {
+              value: 4,
+              label: '4 мм',
+              max_thickness_mm: 14,
+              hot_block_threshold_mm: 4,
+              is_hot_block_zone: true,
+            },
+            {
+              value: 5,
+              label: '5 мм',
+              max_thickness_mm: 14,
+              hot_block_threshold_mm: 4,
+              is_hot_block_zone: true,
+            },
           ]),
           { status: 200 },
         )
@@ -108,6 +132,20 @@ describe('session thickness selection', () => {
     )
     const payload = JSON.parse(String(call?.[1]?.body))
     expect(payload.thickness_mm).toBe(2)
+  })
+
+
+
+  it('shows hot block hint for thicknesses in hot block zone', async () => {
+    setupFetchMock()
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Сессии' }))
+
+    const gasSelect = await screen.findByLabelText('Газ')
+    fireEvent.change(gasSelect, { target: { value: 'air' } })
+
+    expect(await screen.findByText('Толстый режим / горячий блок')).toBeInTheDocument()
   })
 
   it('recalculates thickness when gas changes and previous value is unavailable', async () => {

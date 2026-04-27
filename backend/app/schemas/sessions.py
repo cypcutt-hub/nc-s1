@@ -20,6 +20,9 @@ class DictionaryItem(BaseModel):
 class NumericDictionaryItem(BaseModel):
     value: float
     label: str
+    max_thickness_mm: float
+    hot_block_threshold_mm: float
+    is_hot_block_zone: bool
 
 
 class CutSessionRead(BaseModel):
