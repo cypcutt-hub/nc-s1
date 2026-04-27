@@ -27,6 +27,9 @@ REQUIRED_COLUMNS = (
 )
 
 DEFAULT_TRUST_LEVEL = 100
+DEFAULT_MACHINE_MODEL = "auto-imported"
+DEFAULT_MACHINE_LASER_POWER_W = 6000
+DEFAULT_MACHINE_LENS_FOCAL_LENGTH_MM = 125
 
 
 class BaseModesImportError(ValueError):
@@ -108,17 +111,31 @@ def load_csv_rows(csv_path: Path) -> list[ParsedBaseModeRow]:
     return parsed_rows
 
 
-def _find_machine(db: Session, machine_name: str, row_number: int) -> Machine:
+def _get_or_create_machine(db: Session, machine_name: str) -> Machine:
     machine = db.scalar(select(Machine).where(Machine.name == machine_name))
     if machine is None:
-        raise BaseModesImportError(f"Row {row_number}: machine '{machine_name}' does not exist")
+        machine = Machine(
+            name=machine_name,
+            model=DEFAULT_MACHINE_MODEL,
+            laser_power_w=DEFAULT_MACHINE_LASER_POWER_W,
+            lens_focal_length_mm=DEFAULT_MACHINE_LENS_FOCAL_LENGTH_MM,
+        )
+        db.add(machine)
+        db.flush()
     return machine
 
 
-def _find_material(db: Session, material_group: str, row_number: int) -> Material:
+def _get_or_create_material(db: Session, material_group: str, gas_branch: str) -> Material:
     material = db.scalar(select(Material).where(Material.material_group == material_group))
     if material is None:
-        raise BaseModesImportError(f"Row {row_number}: material_group '{material_group}' does not exist")
+        readable_name = material_group.replace("_", " ").title()
+        material = Material(
+            name=readable_name,
+            material_group=material_group,
+            default_gas_branch=gas_branch,
+        )
+        db.add(material)
+        db.flush()
     return material
 
 
@@ -126,9 +143,9 @@ def upsert_base_modes(rows: list[ParsedBaseModeRow]) -> int:
     imported_count = 0
 
     with SessionLocal() as db:
-        for row_number, row in enumerate(rows, start=2):
-            machine = _find_machine(db, row.machine_name, row_number)
-            material = _find_material(db, row.material_group, row_number)
+        for row in rows:
+            machine = _get_or_create_machine(db, row.machine_name)
+            material = _get_or_create_material(db, row.material_group, row.gas_branch)
 
             existing = db.scalar(
                 select(BaseMode).where(
