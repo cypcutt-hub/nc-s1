@@ -1,5 +1,8 @@
 from pathlib import Path
 
+import pytest
+
+from app.services.allowed_thicknesses import AllowedThicknessesError
 from app.services.allowed_thicknesses import (
     filter_allowed_thicknesses,
     load_allowed_thicknesses_csv,
@@ -45,3 +48,26 @@ def test_hot_block_threshold_is_reflected_in_zone_flag() -> None:
     threshold = filtered[0].hot_block_threshold_mm
     assert threshold == 11
     assert all(item.is_hot_block_zone == (item.thickness_mm >= threshold) for item in filtered)
+
+
+@pytest.mark.parametrize("invalid_value", ["NaN", "inf", "-inf"])
+def test_load_allowed_thicknesses_csv_rejects_non_finite_numbers(
+    tmp_path: Path, invalid_value: str
+) -> None:
+    csv_path = tmp_path / "allowed_thicknesses.csv"
+    csv_path.write_text(
+        "\n".join(
+            [
+                "source_sheet,machine_power_w,material_group,gas_branch,thickness_mm,"
+                "max_thickness_mm,hot_block_threshold_mm,is_hot_block_zone,source_gas_label",
+                (
+                    "sheet1,3000,stainless,N2,2,"
+                    f"{invalid_value},8,false,Азот N2"
+                ),
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(AllowedThicknessesError, match="must be a finite number"):
+        load_allowed_thicknesses_csv(csv_path)

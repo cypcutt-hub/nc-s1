@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import math
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -49,11 +50,18 @@ def _as_float(value: str | None, column: str, row_number: int) -> float:
     text = _as_text(value, column, row_number)
     normalized = text.replace(",", ".")
     try:
-        return float(normalized)
+        parsed = float(normalized)
     except ValueError as exc:
         raise AllowedThicknessesError(
             f"Row {row_number}: '{column}' must be numeric, got '{text}'"
         ) from exc
+
+    if not math.isfinite(parsed):
+        raise AllowedThicknessesError(
+            f"Row {row_number}: '{column}' must be a finite number, got '{text}'"
+        )
+
+    return parsed
 
 
 def _as_int(value: str | None, column: str, row_number: int) -> int:
