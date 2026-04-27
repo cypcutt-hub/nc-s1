@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 import app.main as main
 from app.db.base import Base
-from app.models import BaseMode, Defect, Material, RecommendationRule
+from app.models import BaseMode, Defect, Machine, Material, RecommendationRule
 
 
 @pytest.fixture()
@@ -22,6 +22,12 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]
     Base.metadata.create_all(bind=engine)
 
     with testing_session_local() as db:
+        machine = Machine(
+            name="Machine A",
+            model="Model A",
+            laser_power_w=3000,
+            lens_focal_length_mm=150,
+        )
         steel = Material(name="Steel", material_group="steel", default_gas_branch="N2")
         stainless = Material(
             name="Stainless", material_group="stainless", default_gas_branch="N2"
@@ -32,6 +38,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]
 
         db.add_all(
             [
+                machine,
                 steel,
                 stainless,
                 carbon,
@@ -101,7 +108,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]
             [
                 BaseMode(
                     material_id=steel.id,
-                    machine_id=None,
+                    machine_id=machine.id,
                     thickness_mm=2.5,
                     gas_type="N2",
                     power_percent=92.0,
@@ -116,7 +123,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]
                 ),
                 BaseMode(
                     material_id=steel.id,
-                    machine_id=None,
+                    machine_id=machine.id,
                     thickness_mm=4.0,
                     gas_type="N2",
                     power_percent=88.0,
@@ -131,7 +138,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]
                 ),
                 BaseMode(
                     material_id=steel.id,
-                    machine_id=None,
+                    machine_id=machine.id,
                     thickness_mm=6.0,
                     gas_type="N2",
                     power_percent=83.0,
@@ -149,6 +156,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]
         db.commit()
 
     monkeypatch.setattr(main, "SessionLocal", testing_session_local)
+    monkeypatch.setattr("app.services.base_mode_selector.SessionLocal", testing_session_local)
 
     with TestClient(main.app) as test_client:
         yield test_client
@@ -422,6 +430,48 @@ def test_get_base_mode_no_match_returns_404(client: TestClient) -> None:
 
     assert response.status_code == 404
     assert "base mode not found" in response.json()["detail"]
+
+
+def test_recommend_base_mode_returns_exact_match(client: TestClient) -> None:
+    response = client.get(
+        "/base-mode/recommend",
+        params={
+            "machine_name": "Machine A",
+            "material_group": "steel",
+            "gas_branch": "N2",
+            "thickness_mm": 4.0,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["power"] == 88.0
+    assert body["speed"] == 3.1
+    assert body["frequency"] == 4200.0
+    assert body["pressure"] == 10.0
+    assert body["focus"] == -0.4
+    assert body["height"] == 0.95
+    assert body["duty_cycle"] == 75.0
+    assert body["nozzle"] == 1.5
+
+
+def test_recommend_base_mode_interpolates_values(client: TestClient) -> None:
+    response = client.get(
+        "/base-mode/recommend",
+        params={
+            "machine_name": "Machine A",
+            "material_group": "steel",
+            "gas_branch": "N2",
+            "thickness_mm": 5.0,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["speed"] == pytest.approx(2.85)
+    assert body["pressure"] == pytest.approx(9.75)
+    assert body["focus"] == pytest.approx(-0.45)
+    assert body["height"] == pytest.approx(0.975)
 
 
 def test_invalid_severity_level_rejected(client: TestClient) -> None:

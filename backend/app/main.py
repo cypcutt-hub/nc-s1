@@ -16,6 +16,7 @@ from app.schemas import (
     CutIterationCreate,
     CutIterationRead,
     BaseModeRead,
+    BaseModeRecommendationRead,
     CutSessionCreate,
     CutSessionRead,
     CutSessionReadWithIterations,
@@ -25,7 +26,11 @@ from app.schemas import (
     RecommendationRuleRead,
     RecommendationRuleUpdate,
 )
-from app.services import build_recommendation, build_recommendation_from_iteration
+from app.services import (
+    build_recommendation,
+    build_recommendation_from_iteration,
+    get_best_base_mode,
+)
 
 app = FastAPI(title="NeuroCut API")
 
@@ -180,6 +185,34 @@ def get_base_mode(session_id: int) -> BaseModeRead:
                 f"{session.thickness_mm:g} мм"
             ),
         )
+
+
+@app.get("/base-mode/recommend", response_model=BaseModeRecommendationRead)
+def recommend_base_mode(
+    machine_name: str,
+    material_group: str,
+    gas_branch: str,
+    thickness_mm: float,
+) -> BaseModeRecommendationRead:
+    mode = get_best_base_mode(
+        machine_name=machine_name,
+        material_group=material_group,
+        gas_branch=gas_branch,
+        thickness_mm=thickness_mm,
+    )
+    if mode is None:
+        raise HTTPException(status_code=404, detail="base mode not found")
+
+    return BaseModeRecommendationRead(
+        power=mode.power_percent,
+        speed=mode.speed_m_min,
+        frequency=mode.frequency_hz or 0.0,
+        pressure=mode.pressure_bar,
+        focus=mode.focus_mm,
+        height=mode.cutting_height_mm,
+        duty_cycle=mode.duty_cycle_percent or 0.0,
+        nozzle=mode.nozzle_diameter_mm,
+    )
 
 
 @app.post(

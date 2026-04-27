@@ -121,6 +121,17 @@ class BaseModeRead(BaseModel):
     explanation: str
 
 
+class BaseModeRecommendationRead(BaseModel):
+    power: float
+    speed: float
+    frequency: float
+    pressure: float
+    focus: float
+    height: float
+    duty_cycle: float
+    nozzle: float
+
+
 class RecommendationRequest(BaseModel):
     defect_code: str
     severity_level: int = Field(ge=0, le=3)
