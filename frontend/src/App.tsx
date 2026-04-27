@@ -69,6 +69,10 @@ type Recommendation = {
   explanation: string[]
 }
 
+type BaseModeResponse = ModeVector & {
+  explanation: string
+}
+
 type RuleParameter =
   | 'power'
   | 'speed'
@@ -335,6 +339,38 @@ export default function App() {
       setRecommendation(null)
       setRecommendedMode(emptyRecommendationMode())
       setError(e instanceof Error ? e.message : 'Failed to get recommendation')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  async function loadBaseMode() {
+    if (!currentSession) return
+
+    setIsLoading(true)
+    setError(null)
+    setMessage(null)
+
+    try {
+      const response = await fetch(`${API_BASE}/sessions/${currentSession.id}/base-mode`)
+      if (!response.ok) {
+        throw new Error(await readError(response))
+      }
+
+      const data = (await response.json()) as BaseModeResponse
+      setCurrentMode({
+        power: data.power,
+        speed: data.speed,
+        frequency: data.frequency,
+        pressure: data.pressure,
+        focus: data.focus,
+        height: data.height,
+        duty_cycle: data.duty_cycle,
+        nozzle: data.nozzle,
+      })
+      setMessage(data.explanation === 'Exact match used' ? 'Base mode loaded' : data.explanation)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load base mode')
     } finally {
       setIsLoading(false)
     }
@@ -940,6 +976,11 @@ export default function App() {
             </p>
 
             <h3>A) Current mode</h3>
+            <div className="row">
+              <button type="button" onClick={loadBaseMode} disabled={isLoading}>
+                Load base mode / Загрузить стартовый режим
+              </button>
+            </div>
             <div className="grid two-col">
               {MODE_KEYS.map((key) => (
                 <label key={`current-${key}`}>

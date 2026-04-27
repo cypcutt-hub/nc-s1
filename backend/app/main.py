@@ -1,12 +1,20 @@
 from fastapi import FastAPI, HTTPException
-from sqlalchemy import text
+from sqlalchemy import text, func
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.db.session import SessionLocal
-from app.models import CutIteration, CutSession, Defect, RecommendationRule
+from app.models import (
+    BaseMode,
+    CutIteration,
+    CutSession,
+    Defect,
+    Material,
+    RecommendationRule,
+)
 from app.schemas import (
     CutIterationCreate,
     CutIterationRead,
+    BaseModeRead,
     CutSessionCreate,
     CutSessionRead,
     CutSessionReadWithIterations,
@@ -62,7 +70,80 @@ def get_session(session_id: int) -> CutSession:
         return session
 
 
-@app.post("/sessions/{session_id}/iterations", response_model=CutIterationRead, status_code=201)
+@app.get("/sessions/{session_id}/base-mode", response_model=BaseModeRead)
+def get_base_mode(session_id: int) -> BaseModeRead:
+    with SessionLocal() as db:
+        session = db.get(CutSession, session_id)
+        if session is None:
+            raise HTTPException(status_code=404, detail="session not found")
+
+        exact_mode = (
+            db.query(BaseMode)
+            .join(Material, BaseMode.material_id == Material.id)
+            .filter(
+                Material.material_group == session.material_group,
+                BaseMode.gas_type == session.gas_branch,
+                BaseMode.thickness_mm == session.thickness_mm,
+            )
+            .order_by(BaseMode.id.asc())
+            .first()
+        )
+        if exact_mode is not None:
+            return BaseModeRead(
+                power=exact_mode.power_percent,
+                speed=exact_mode.speed_m_min,
+                frequency=exact_mode.frequency_hz or 0.0,
+                pressure=exact_mode.pressure_bar,
+                focus=exact_mode.focus_mm,
+                height=exact_mode.cutting_height_mm,
+                duty_cycle=exact_mode.duty_cycle_percent or 0.0,
+                nozzle=exact_mode.nozzle_diameter_mm,
+                explanation="Exact match used",
+            )
+
+        nearest_mode = (
+            db.query(BaseMode)
+            .join(Material, BaseMode.material_id == Material.id)
+            .filter(
+                Material.material_group == session.material_group,
+                BaseMode.gas_type == session.gas_branch,
+            )
+            .order_by(
+                func.abs(BaseMode.thickness_mm - session.thickness_mm).asc(),
+                BaseMode.id.asc(),
+            )
+            .first()
+        )
+        if nearest_mode is None:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"base mode not found for material_group={session.material_group}, "
+                    f"gas_branch={session.gas_branch}"
+                ),
+            )
+
+        return BaseModeRead(
+            power=nearest_mode.power_percent,
+            speed=nearest_mode.speed_m_min,
+            frequency=nearest_mode.frequency_hz or 0.0,
+            pressure=nearest_mode.pressure_bar,
+            focus=nearest_mode.focus_mm,
+            height=nearest_mode.cutting_height_mm,
+            duty_cycle=nearest_mode.duty_cycle_percent or 0.0,
+            nozzle=nearest_mode.nozzle_diameter_mm,
+            explanation=(
+                f"Nearest thickness {nearest_mode.thickness_mm:g} used instead of "
+                f"{session.thickness_mm:g}"
+            ),
+        )
+
+
+@app.post(
+    "/sessions/{session_id}/iterations",
+    response_model=CutIterationRead,
+    status_code=201,
+)
 def add_iteration(session_id: int, payload: CutIterationCreate) -> CutIteration:
     with SessionLocal() as db:
         session = db.get(CutSession, session_id)
