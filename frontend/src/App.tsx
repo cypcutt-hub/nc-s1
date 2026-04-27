@@ -65,6 +65,9 @@ type DictionaryItem = {
 type NumericDictionaryItem = {
   value: number
   label: string
+  max_thickness_mm: number
+  hot_block_threshold_mm: number
+  is_hot_block_zone: boolean
 }
 
 type Recommendation = {
@@ -205,6 +208,11 @@ export default function App() {
     if (!currentSession) return []
     return [...currentSession.iterations].sort((a, b) => a.step_number - b.step_number)
   }, [currentSession])
+
+  const selectedThicknessOption = useMemo(
+    () => thicknesses.find((item) => item.value === sessionForm.thickness_mm) ?? null,
+    [thicknesses, sessionForm.thickness_mm],
+  )
 
   const recommendationDiff = useMemo(() => {
     if (!recommendation) return []
@@ -1030,6 +1038,9 @@ export default function App() {
                 Создать сессию
               </button>
             </form>
+            {selectedThicknessOption?.is_hot_block_zone && (
+              <p className="alert">Толстый режим / горячий блок</p>
+            )}
             {thicknesses.length === 0 && (
               <p className="alert error">
                 Для выбранной комбинации станка/материала/газа нет доступных толщин.

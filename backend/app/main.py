@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from fastapi import FastAPI, HTTPException
 from sqlalchemy import text, func
 from sqlalchemy.exc import SQLAlchemyError
@@ -32,14 +34,29 @@ from app.services import (
     build_recommendation_from_iteration,
     get_best_base_mode,
 )
+from app.services.allowed_thicknesses import (
+    AllowedThicknessRow,
+    filter_allowed_thicknesses,
+)
 
 app = FastAPI(title="NeuroCut API")
 
-MACHINE_DICTIONARY = [
-    DictionaryItem(
+@dataclass(frozen=True)
+class MachineDictionaryEntry:
+    value: str
+    label: str
+    machine_power_w: int
+
+
+MACHINE_ENTRIES = [
+    MachineDictionaryEntry(
         value="HSG_3kW_150mm_VSX_NC30E",
         label="HSG 3 кВт, линза 150 мм, голова VSX NC30E",
+        machine_power_w=3000,
     )
+]
+MACHINE_DICTIONARY = [
+    DictionaryItem(value=entry.value, label=entry.label) for entry in MACHINE_ENTRIES
 ]
 MATERIAL_DICTIONARY = [
     DictionaryItem(value="carbon", label="Углеродистая сталь"),
@@ -56,19 +73,25 @@ DEFECT_DICTIONARY = [
     DictionaryItem(value="no_cut", label="Непрорез"),
     DictionaryItem(value="overburn", label="Пережог / оплавление"),
 ]
-THICKNESS_DICTIONARY: dict[tuple[str, str, str], list[float]] = {
-    ("HSG_3kW_150mm_VSX_NC30E", "carbon", "O2"): [4, 5, 6, 8, 10, 12, 14, 16, 20],
-    ("HSG_3kW_150mm_VSX_NC30E", "carbon", "air"): [1, 2, 3, 4],
-    ("HSG_3kW_150mm_VSX_NC30E", "stainless", "N2"): [1, 2, 3, 4, 5, 6, 8, 10],
-    ("HSG_3kW_150mm_VSX_NC30E", "stainless", "air"): [1, 2, 3, 4, 5, 6, 8, 10, 12, 14],
-    ("HSG_3kW_150mm_VSX_NC30E", "aluminum", "air"): [1, 2, 3, 4, 5],
+
+
+MACHINE_POWER_BY_NAME = {
+    entry.value: entry.machine_power_w for entry in MACHINE_ENTRIES
 }
 
 
 def get_allowed_thicknesses(
     machine_name: str, material_group: str, gas_branch: str
-) -> list[float]:
-    return THICKNESS_DICTIONARY.get((machine_name, material_group, gas_branch), [])
+) -> list[AllowedThicknessRow]:
+    machine_power = MACHINE_POWER_BY_NAME.get(machine_name)
+    if machine_power is None:
+        return []
+
+    return filter_allowed_thicknesses(
+        machine_power_w=machine_power,
+        material_group=material_group,
+        gas_branch=gas_branch,
+    )
 
 
 @app.get("/health")
@@ -110,29 +133,36 @@ def list_defects() -> list[DictionaryItem]:
 def list_thicknesses(
     machine_name: str, material_group: str, gas_branch: str
 ) -> list[NumericDictionaryItem]:
-    thicknesses = get_allowed_thicknesses(
+    thickness_options = get_allowed_thicknesses(
         machine_name=machine_name,
         material_group=material_group,
         gas_branch=gas_branch,
     )
     return [
-        NumericDictionaryItem(value=thickness, label=f"{thickness:g} мм")
-        for thickness in thicknesses
+        NumericDictionaryItem(
+            value=item.thickness_mm,
+            label=f"{item.thickness_mm:g} мм",
+            max_thickness_mm=item.max_thickness_mm,
+            hot_block_threshold_mm=item.hot_block_threshold_mm,
+            is_hot_block_zone=item.is_hot_block_zone,
+        )
+        for item in thickness_options
     ]
 
 
 @app.post("/sessions", response_model=CutSessionRead, status_code=201)
 def create_session(payload: CutSessionCreate) -> CutSession:
-    allowed_thicknesses = get_allowed_thicknesses(
+    thickness_options = get_allowed_thicknesses(
         machine_name=payload.machine_name,
         material_group=payload.material_group,
         gas_branch=payload.gas_branch,
     )
-    if not allowed_thicknesses:
+    if not thickness_options:
         raise HTTPException(
             status_code=400,
             detail="no allowed thicknesses for selected machine/material/gas",
         )
+    allowed_thicknesses = {item.thickness_mm for item in thickness_options}
     if payload.thickness_mm not in allowed_thicknesses:
         raise HTTPException(status_code=400, detail="thickness is not allowed")
 

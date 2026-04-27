@@ -1,0 +1,37 @@
+source_sheet,machine_power_w,material_group,gas_branch,thickness_mm,max_thickness_mm,hot_block_threshold_mm,is_hot_block_zone,source_gas_label
+nc_s1_seed,3000,carbon,O2,4,22,11,false,Кислород O2
+nc_s1_seed,3000,carbon,O2,5,22,11,false,Кислород O2
+nc_s1_seed,3000,carbon,O2,6,22,11,false,Кислород O2
+nc_s1_seed,3000,carbon,O2,8,22,11,false,Кислород O2
+nc_s1_seed,3000,carbon,O2,10,22,11,false,Кислород O2
+nc_s1_seed,3000,carbon,O2,12,22,11,true,Кислород O2
+nc_s1_seed,3000,carbon,O2,14,22,11,true,Кислород O2
+nc_s1_seed,3000,carbon,O2,16,22,11,true,Кислород O2
+nc_s1_seed,3000,carbon,O2,20,22,11,true,Кислород O2
+nc_s1_seed,3000,carbon,air,1,4,4,false,Воздух
+nc_s1_seed,3000,carbon,air,2,4,4,false,Воздух
+nc_s1_seed,3000,carbon,air,3,4,4,false,Воздух
+nc_s1_seed,3000,carbon,air,4,4,4,true,Воздух
+nc_s1_seed,3000,stainless,N2,1,10,8,false,Азот N2
+nc_s1_seed,3000,stainless,N2,2,10,8,false,Азот N2
+nc_s1_seed,3000,stainless,N2,3,10,8,false,Азот N2
+nc_s1_seed,3000,stainless,N2,4,10,8,false,Азот N2
+nc_s1_seed,3000,stainless,N2,5,10,8,false,Азот N2
+nc_s1_seed,3000,stainless,N2,6,10,8,false,Азот N2
+nc_s1_seed,3000,stainless,N2,8,10,8,true,Азот N2
+nc_s1_seed,3000,stainless,N2,10,10,8,true,Азот N2
+nc_s1_seed,3000,stainless,air,1,14,11,false,Воздух
+nc_s1_seed,3000,stainless,air,2,14,11,false,Воздух
+nc_s1_seed,3000,stainless,air,3,14,11,false,Воздух
+nc_s1_seed,3000,stainless,air,4,14,11,false,Воздух
+nc_s1_seed,3000,stainless,air,5,14,11,false,Воздух
+nc_s1_seed,3000,stainless,air,6,14,11,false,Воздух
+nc_s1_seed,3000,stainless,air,8,14,11,false,Воздух
+nc_s1_seed,3000,stainless,air,10,14,11,false,Воздух
+nc_s1_seed,3000,stainless,air,12,14,11,true,Воздух
+nc_s1_seed,3000,stainless,air,14,14,11,true,Воздух
+nc_s1_seed,3000,aluminum,air,1,5,4,false,Воздух
+nc_s1_seed,3000,aluminum,air,2,5,4,false,Воздух
+nc_s1_seed,3000,aluminum,air,3,5,4,false,Воздух
+nc_s1_seed,3000,aluminum,air,4,5,4,true,Воздух
+nc_s1_seed,3000,aluminum,air,5,5,4,true,Воздух
