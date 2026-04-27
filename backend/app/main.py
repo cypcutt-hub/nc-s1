@@ -3,7 +3,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.db.session import SessionLocal
-from app.models import CutIteration, CutSession, Defect
+from app.models import CutIteration, CutSession, Defect, RecommendationRule
 from app.schemas import (
     CutIterationCreate,
     CutIterationRead,
@@ -12,6 +12,9 @@ from app.schemas import (
     CutSessionReadWithIterations,
     RecommendationRequest,
     RecommendationRead,
+    RecommendationRuleCreate,
+    RecommendationRuleRead,
+    RecommendationRuleUpdate,
 )
 from app.services import build_recommendation, build_recommendation_from_iteration
 
@@ -109,3 +112,50 @@ def recommend_next_mode(
             raise HTTPException(status_code=400, detail="session has no iterations")
 
         return build_recommendation_from_iteration(last_iteration, session, db)
+
+
+@app.get("/rules", response_model=list[RecommendationRuleRead])
+def list_rules() -> list[RecommendationRule]:
+    with SessionLocal() as db:
+        return db.query(RecommendationRule).order_by(RecommendationRule.id.asc()).all()
+
+
+@app.post("/rules", response_model=RecommendationRuleRead, status_code=201)
+def create_rule(payload: RecommendationRuleCreate) -> RecommendationRule:
+    with SessionLocal() as db:
+        defect = db.query(Defect).filter(Defect.code == payload.defect_code).first()
+        if defect is None:
+            raise HTTPException(status_code=400, detail="unknown defect_code")
+
+        rule = RecommendationRule(**payload.model_dump())
+        db.add(rule)
+        db.commit()
+        db.refresh(rule)
+        return rule
+
+
+@app.patch("/rules/{rule_id}", response_model=RecommendationRuleRead)
+def update_rule(rule_id: int, payload: RecommendationRuleUpdate) -> RecommendationRule:
+    with SessionLocal() as db:
+        rule = db.get(RecommendationRule, rule_id)
+        if rule is None:
+            raise HTTPException(status_code=404, detail="rule not found")
+
+        updates = payload.model_dump(exclude_unset=True)
+        for field, value in updates.items():
+            setattr(rule, field, value)
+
+        db.commit()
+        db.refresh(rule)
+        return rule
+
+
+@app.delete("/rules/{rule_id}", status_code=204)
+def delete_rule(rule_id: int) -> None:
+    with SessionLocal() as db:
+        rule = db.get(RecommendationRule, rule_id)
+        if rule is None:
+            raise HTTPException(status_code=404, detail="rule not found")
+
+        db.delete(rule)
+        db.commit()

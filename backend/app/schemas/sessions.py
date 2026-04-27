@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -106,3 +108,42 @@ class RecommendationRequest(BaseModel):
     defect_code: str
     severity_level: int = Field(ge=0, le=3)
     current_mode: ModeVector
+
+
+RuleParameter = Literal[
+    "power",
+    "speed",
+    "frequency",
+    "pressure",
+    "focus",
+    "height",
+    "duty_cycle",
+    "nozzle",
+]
+RuleDirection = Literal["increase", "decrease"]
+
+
+class RecommendationRuleCreate(BaseModel):
+    defect_code: str
+    parameter: RuleParameter
+    direction: RuleDirection
+    base_delta: float = Field(gt=0)
+    is_active: bool = True
+
+
+class RecommendationRuleUpdate(BaseModel):
+    parameter: RuleParameter | None = None
+    direction: RuleDirection | None = None
+    base_delta: float | None = Field(default=None, gt=0)
+    is_active: bool | None = None
+
+
+class RecommendationRuleRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    defect_code: str
+    parameter: RuleParameter
+    direction: RuleDirection
+    base_delta: float
+    is_active: bool
