@@ -261,6 +261,85 @@ def test_invalid_thickness_rejected(client: TestClient) -> None:
     assert response.status_code == 422
 
 
+def test_rules_list_returns_seeded_rules(client: TestClient) -> None:
+    response = client.get("/rules")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) >= 5
+    assert all("defect_code" in rule for rule in body)
+    assert all("parameter" in rule for rule in body)
+    assert all("direction" in rule for rule in body)
+
+
+def test_create_rule(client: TestClient) -> None:
+    response = client.post(
+        "/rules",
+        json={
+            "defect_code": "warp",
+            "parameter": "pressure",
+            "direction": "increase",
+            "base_delta": 0.2,
+            "is_active": True,
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["id"] > 0
+    assert body["defect_code"] == "warp"
+    assert body["parameter"] == "pressure"
+    assert body["direction"] == "increase"
+    assert body["base_delta"] == 0.2
+    assert body["is_active"] is True
+
+
+def test_update_rule(client: TestClient) -> None:
+    created = client.post(
+        "/rules",
+        json={
+            "defect_code": "warp",
+            "parameter": "frequency",
+            "direction": "increase",
+            "base_delta": 0.08,
+        },
+    )
+    assert created.status_code == 201
+    rule_id = created.json()["id"]
+
+    response = client.patch(
+        f"/rules/{rule_id}",
+        json={
+            "parameter": "pressure",
+            "direction": "decrease",
+            "base_delta": 0.12,
+            "is_active": False,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == rule_id
+    assert body["parameter"] == "pressure"
+    assert body["direction"] == "decrease"
+    assert body["base_delta"] == 0.12
+    assert body["is_active"] is False
+
+
+def test_invalid_parameter_rejected(client: TestClient) -> None:
+    response = client.post(
+        "/rules",
+        json={
+            "defect_code": "warp",
+            "parameter": "temperature",
+            "direction": "increase",
+            "base_delta": 0.1,
+        },
+    )
+
+    assert response.status_code == 422
+
+
 def test_recommendation_for_no_cut(client: TestClient) -> None:
     session = _create_session(client)
     assert client.post(f"/sessions/{session['id']}/iterations", json=_iteration_payload()).status_code == 201
@@ -483,6 +562,44 @@ def test_recommendation_disabling_rule_changes_result(client: TestClient) -> Non
     assert after.status_code == 200
     assert before.json()["speed_after"] != after.json()["speed_after"]
     assert after.json()["speed_after"] == payload["speed_after"]
+
+
+def test_recommendation_changes_after_rule_update_via_api(client: TestClient) -> None:
+    session = _create_session(client)
+    payload = _iteration_payload(defect_code="no_cut", severity_level=2, power_after=1000.0, speed_after=12.0)
+    assert client.post(f"/sessions/{session['id']}/iterations", json=payload).status_code == 201
+
+    before = client.post(f"/sessions/{session['id']}/recommend")
+    assert before.status_code == 200
+
+    rules = client.get("/rules")
+    assert rules.status_code == 200
+    power_rule = next(
+        rule for rule in rules.json() if rule["defect_code"] == "no_cut" and rule["parameter"] == "power"
+    )
+
+    patch_response = client.patch(
+        f"/rules/{power_rule['id']}",
+        json={"base_delta": 0.2},
+    )
+    assert patch_response.status_code == 200
+
+    after = client.post(f"/sessions/{session['id']}/recommend")
+    assert after.status_code == 200
+    assert before.json()["power_after"] != after.json()["power_after"]
+
+
+def test_disable_rule_via_api(client: TestClient) -> None:
+    rules = client.get("/rules")
+    assert rules.status_code == 200
+    speed_rule = next(
+        rule for rule in rules.json() if rule["defect_code"] == "no_cut" and rule["parameter"] == "speed"
+    )
+
+    response = client.patch(f"/rules/{speed_rule['id']}", json={"is_active": False})
+
+    assert response.status_code == 200
+    assert response.json()["is_active"] is False
 
 
 def test_recommendation_with_defect_without_rules_returns_unchanged_mode(client: TestClient) -> None:
