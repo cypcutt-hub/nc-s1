@@ -23,6 +23,13 @@ body {
   color: #4c5a68;
 }
 
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1rem 0;
+  flex-wrap: wrap;
+}
+
 .card {
   background: #ffffff;
   border: 1px solid #dce2ea;

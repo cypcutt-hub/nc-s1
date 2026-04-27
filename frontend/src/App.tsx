@@ -98,6 +98,8 @@ type RecommendationRuleCreate = {
   is_active: boolean
 }
 
+type TopLevelTab = 'operator' | 'sessions' | 'rules'
+
 const API_BASE = import.meta.env.VITE_API_BASE_PATH ?? '/api'
 
 const MODE_KEYS: Array<keyof ModeVector> = [
@@ -171,6 +173,7 @@ export default function App() {
   })
   const [editingRuleId, setEditingRuleId] = useState<number | null>(null)
   const [editRule, setEditRule] = useState<RecommendationRule | null>(null)
+  const [activeTab, setActiveTab] = useState<TopLevelTab>('operator')
 
   const orderedIterations = useMemo(() => {
     if (!currentSession) return []
@@ -558,290 +561,373 @@ export default function App() {
     <main className="page">
       <h1>NeuroCut Operator Tuning</h1>
       <p className="subtitle">Session API demo: recommendation loop for manual shop-floor tuning.</p>
+      <nav className="tabs" aria-label="Main sections">
+        <button
+          type="button"
+          className={activeTab === 'operator' ? 'ghost active' : 'ghost'}
+          onClick={() => setActiveTab('operator')}
+        >
+          Operator
+        </button>
+        <button
+          type="button"
+          className={activeTab === 'sessions' ? 'ghost active' : 'ghost'}
+          onClick={() => setActiveTab('sessions')}
+        >
+          Sessions
+        </button>
+        <button
+          type="button"
+          className={activeTab === 'rules' ? 'ghost active' : 'ghost'}
+          onClick={() => setActiveTab('rules')}
+        >
+          Rules
+        </button>
+      </nav>
 
       {error && <p className="alert error">Error: {error}</p>}
       {message && <p className="alert success">{message}</p>}
 
-      <section className="card">
-        <h2>Algorithm rules</h2>
-        <p className="muted">Manage recommendation rules stored in DB.</p>
-        <div className="row">
-          <button type="button" onClick={loadRules} disabled={rulesLoading}>
-            Refresh rules
-          </button>
-        </div>
+      {activeTab === 'rules' && (
+        <section className="card">
+          <h2>Algorithm rules</h2>
+          <p className="muted">Manage recommendation rules stored in DB.</p>
+          <div className="row">
+            <button type="button" onClick={loadRules} disabled={rulesLoading}>
+              Refresh rules
+            </button>
+          </div>
 
-        <h3>Create rule</h3>
-        <form onSubmit={createRule} className="grid rule-grid">
-          <label>
-            Defect code
-            <input
-              list="rule-defect-codes"
-              value={newRule.defect_code}
-              onChange={(event) => setNewRule({ ...newRule, defect_code: event.target.value })}
-              required
-            />
-            <datalist id="rule-defect-codes">
-              {DEFECT_OPTIONS.map((item) => (
-                <option key={`rule-${item}`} value={item} />
-              ))}
-            </datalist>
-          </label>
-          <label>
-            Parameter
-            <select
-              value={newRule.parameter}
-              onChange={(event) =>
-                setNewRule({ ...newRule, parameter: event.target.value as RuleParameter })
-              }
-              required
-            >
-              {RULE_PARAMETER_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Direction
-            <select
-              value={newRule.direction}
-              onChange={(event) =>
-                setNewRule({ ...newRule, direction: event.target.value as RuleDirection })
-              }
-              required
-            >
-              {RULE_DIRECTION_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Base delta
-            <input
-              type="number"
-              min="0.000001"
-              step="0.01"
-              value={newRule.base_delta}
-              onChange={(event) => setNewRule({ ...newRule, base_delta: Number(event.target.value) })}
-              required
-            />
-          </label>
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={newRule.is_active}
-              onChange={(event) => setNewRule({ ...newRule, is_active: event.target.checked })}
-            />
-            Active
-          </label>
-          <button type="submit" disabled={rulesLoading}>
-            Add rule
-          </button>
-        </form>
+          <h3>Create rule</h3>
+          <form onSubmit={createRule} className="grid rule-grid">
+            <label>
+              Defect code
+              <input
+                list="rule-defect-codes"
+                value={newRule.defect_code}
+                onChange={(event) => setNewRule({ ...newRule, defect_code: event.target.value })}
+                required
+              />
+              <datalist id="rule-defect-codes">
+                {DEFECT_OPTIONS.map((item) => (
+                  <option key={`rule-${item}`} value={item} />
+                ))}
+              </datalist>
+            </label>
+            <label>
+              Parameter
+              <select
+                value={newRule.parameter}
+                onChange={(event) =>
+                  setNewRule({ ...newRule, parameter: event.target.value as RuleParameter })
+                }
+                required
+              >
+                {RULE_PARAMETER_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Direction
+              <select
+                value={newRule.direction}
+                onChange={(event) =>
+                  setNewRule({ ...newRule, direction: event.target.value as RuleDirection })
+                }
+                required
+              >
+                {RULE_DIRECTION_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Base delta
+              <input
+                type="number"
+                min="0.000001"
+                step="0.01"
+                value={newRule.base_delta}
+                onChange={(event) => setNewRule({ ...newRule, base_delta: Number(event.target.value) })}
+                required
+              />
+            </label>
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={newRule.is_active}
+                onChange={(event) => setNewRule({ ...newRule, is_active: event.target.checked })}
+              />
+              Active
+            </label>
+            <button type="submit" disabled={rulesLoading}>
+              Add rule
+            </button>
+          </form>
 
-        <h3>Rules</h3>
-        {rules.length === 0 ? (
-          <p className="muted">No rules loaded yet. Click “Refresh rules”.</p>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Defect</th>
-                  <th>Parameter</th>
-                  <th>Direction</th>
-                  <th>Base delta</th>
-                  <th>Active</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rules.map((rule) => {
-                  const isEditing = editingRuleId === rule.id && editRule !== null
-                  return (
-                    <tr key={rule.id}>
-                      <td>{rule.id}</td>
-                      <td>{rule.defect_code}</td>
-                      <td>
-                        {isEditing ? (
-                          <select
-                            value={editRule.parameter}
-                            onChange={(event) =>
-                              setEditRule({ ...editRule, parameter: event.target.value as RuleParameter })
-                            }
-                          >
-                            {RULE_PARAMETER_OPTIONS.map((option) => (
-                              <option key={`${rule.id}-${option}`} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          rule.parameter
-                        )}
-                      </td>
-                      <td>
-                        {isEditing ? (
-                          <select
-                            value={editRule.direction}
-                            onChange={(event) =>
-                              setEditRule({ ...editRule, direction: event.target.value as RuleDirection })
-                            }
-                          >
-                            {RULE_DIRECTION_OPTIONS.map((option) => (
-                              <option key={`${rule.id}-${option}`} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          rule.direction
-                        )}
-                      </td>
-                      <td>
-                        {isEditing ? (
-                          <input
-                            type="number"
-                            min="0.000001"
-                            step="0.01"
-                            value={editRule.base_delta}
-                            onChange={(event) =>
-                              setEditRule({ ...editRule, base_delta: Number(event.target.value) })
-                            }
-                          />
-                        ) : (
-                          rule.base_delta
-                        )}
-                      </td>
-                      <td>{isEditing ? (editRule.is_active ? 'yes' : 'no') : rule.is_active ? 'yes' : 'no'}</td>
-                      <td>
-                        <div className="button-group">
+          <h3>Rules</h3>
+          {rules.length === 0 ? (
+            <p className="muted">No rules loaded yet. Click “Refresh rules”.</p>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Defect</th>
+                    <th>Parameter</th>
+                    <th>Direction</th>
+                    <th>Base delta</th>
+                    <th>Active</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rules.map((rule) => {
+                    const isEditing = editingRuleId === rule.id && editRule !== null
+                    return (
+                      <tr key={rule.id}>
+                        <td>{rule.id}</td>
+                        <td>{rule.defect_code}</td>
+                        <td>
                           {isEditing ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => saveRule(rule.id)}
-                                disabled={rulesLoading}
-                                className="ghost"
-                              >
-                                Save
-                              </button>
-                              <button
-                                type="button"
-                                onClick={cancelEditRule}
-                                disabled={rulesLoading}
-                                className="ghost"
-                              >
-                                Cancel
-                              </button>
-                            </>
+                            <select
+                              value={editRule.parameter}
+                              onChange={(event) =>
+                                setEditRule({ ...editRule, parameter: event.target.value as RuleParameter })
+                              }
+                            >
+                              {RULE_PARAMETER_OPTIONS.map((option) => (
+                                <option key={`${rule.id}-${option}`} value={option}>
+                                  {option}
+                                </option>
+                              ))}
+                            </select>
                           ) : (
+                            rule.parameter
+                          )}
+                        </td>
+                        <td>
+                          {isEditing ? (
+                            <select
+                              value={editRule.direction}
+                              onChange={(event) =>
+                                setEditRule({ ...editRule, direction: event.target.value as RuleDirection })
+                              }
+                            >
+                              {RULE_DIRECTION_OPTIONS.map((option) => (
+                                <option key={`${rule.id}-${option}`} value={option}>
+                                  {option}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            rule.direction
+                          )}
+                        </td>
+                        <td>
+                          {isEditing ? (
+                            <input
+                              type="number"
+                              min="0.000001"
+                              step="0.01"
+                              value={editRule.base_delta}
+                              onChange={(event) =>
+                                setEditRule({ ...editRule, base_delta: Number(event.target.value) })
+                              }
+                            />
+                          ) : (
+                            rule.base_delta
+                          )}
+                        </td>
+                        <td>{isEditing ? (editRule.is_active ? 'yes' : 'no') : rule.is_active ? 'yes' : 'no'}</td>
+                        <td>
+                          <div className="button-group">
+                            {isEditing ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => saveRule(rule.id)}
+                                  disabled={rulesLoading}
+                                  className="ghost"
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={cancelEditRule}
+                                  disabled={rulesLoading}
+                                  className="ghost"
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => startEditRule(rule)}
+                                disabled={rulesLoading}
+                                className="ghost"
+                              >
+                                Edit
+                              </button>
+                            )}
                             <button
                               type="button"
-                              onClick={() => startEditRule(rule)}
+                              onClick={() => toggleRuleActive(rule)}
                               disabled={rulesLoading}
                               className="ghost"
                             >
-                              Edit
+                              {rule.is_active ? 'Disable' : 'Enable'}
                             </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => toggleRuleActive(rule)}
-                            disabled={rulesLoading}
-                            className="ghost"
-                          >
-                            {rule.is_active ? 'Disable' : 'Enable'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => removeRule(rule)}
-                            disabled={rulesLoading}
-                            className="ghost danger"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+                            <button
+                              type="button"
+                              onClick={() => removeRule(rule)}
+                              disabled={rulesLoading}
+                              className="ghost danger"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
 
-      <section className="card">
-        <h2>Create session</h2>
-        <form onSubmit={createSession} className="grid">
-          <label>
-            Machine name
-            <input
-              value={sessionForm.machine_name}
-              onChange={(event) => setSessionForm({ ...sessionForm, machine_name: event.target.value })}
-              required
-            />
-          </label>
-          <label>
-            Material group
-            <input
-              value={sessionForm.material_group}
-              onChange={(event) => setSessionForm({ ...sessionForm, material_group: event.target.value })}
-              required
-            />
-          </label>
-          <label>
-            Thickness (mm)
-            <input
-              type="number"
-              min="0.01"
-              step="0.01"
-              value={sessionForm.thickness_mm}
-              onChange={(event) =>
-                setSessionForm({ ...sessionForm, thickness_mm: Number(event.target.value) })
-              }
-              required
-            />
-          </label>
-          <label>
-            Gas branch
-            <input
-              value={sessionForm.gas_branch}
-              onChange={(event) => setSessionForm({ ...sessionForm, gas_branch: event.target.value })}
-              required
-            />
-          </label>
-          <button type="submit" disabled={isLoading}>
-            Create session
-          </button>
-        </form>
-      </section>
-
-      <section className="card">
-        <h2>Load session</h2>
-        <form onSubmit={loadSession} className="row">
-          <input
-            type="number"
-            min="1"
-            value={sessionIdInput}
-            onChange={(event) => setSessionIdInput(event.target.value)}
-            placeholder="Session ID"
-            required
-          />
-          <button type="submit" disabled={isLoading}>
-            Load
-          </button>
-        </form>
-      </section>
-
-      {currentSession && (
+      {activeTab === 'sessions' && (
         <>
+          <section className="card">
+            <h2>Create session</h2>
+            <form onSubmit={createSession} className="grid">
+              <label>
+                Machine name
+                <input
+                  value={sessionForm.machine_name}
+                  onChange={(event) => setSessionForm({ ...sessionForm, machine_name: event.target.value })}
+                  required
+                />
+              </label>
+              <label>
+                Material group
+                <input
+                  value={sessionForm.material_group}
+                  onChange={(event) => setSessionForm({ ...sessionForm, material_group: event.target.value })}
+                  required
+                />
+              </label>
+              <label>
+                Thickness (mm)
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={sessionForm.thickness_mm}
+                  onChange={(event) =>
+                    setSessionForm({ ...sessionForm, thickness_mm: Number(event.target.value) })
+                  }
+                  required
+                />
+              </label>
+              <label>
+                Gas branch
+                <input
+                  value={sessionForm.gas_branch}
+                  onChange={(event) => setSessionForm({ ...sessionForm, gas_branch: event.target.value })}
+                  required
+                />
+              </label>
+              <button type="submit" disabled={isLoading}>
+                Create session
+              </button>
+            </form>
+          </section>
+
+          <section className="card">
+            <h2>Load session</h2>
+            <form onSubmit={loadSession} className="row">
+              <input
+                type="number"
+                min="1"
+                value={sessionIdInput}
+                onChange={(event) => setSessionIdInput(event.target.value)}
+                placeholder="Session ID"
+                required
+              />
+              <button type="submit" disabled={isLoading}>
+                Load
+              </button>
+            </form>
+          </section>
+
+          {currentSession ? (
+            <>
+              <section className="card">
+                <h2>Session details</h2>
+                <p>Session ID: {currentSession.id}</p>
+                <p>Machine: {currentSession.machine_name}</p>
+                <p>Material group: {currentSession.material_group}</p>
+                <p>Thickness: {currentSession.thickness_mm} mm</p>
+                <p>Gas branch: {currentSession.gas_branch}</p>
+                <p>Created at: {new Date(currentSession.created_at).toLocaleString()}</p>
+              </section>
+              <section className="card">
+                <h2>Iterations (ordered by step_number)</h2>
+                {orderedIterations.length === 0 ? (
+                  <p>No iterations yet.</p>
+                ) : (
+                  <div className="iterations">
+                    {orderedIterations.map((iteration) => (
+                      <article key={iteration.id}>
+                        <h3>
+                          Step {iteration.step_number} · defect {iteration.defect_code} · severity{' '}
+                          {iteration.severity_level}
+                        </h3>
+                        <p>Created at: {new Date(iteration.created_at).toLocaleString()}</p>
+                        <p>
+                          Before: power {iteration.power_before}, speed {iteration.speed_before}, frequency{' '}
+                          {iteration.frequency_before}, pressure {iteration.pressure_before}, focus{' '}
+                          {iteration.focus_before}, height {iteration.height_before}, duty_cycle{' '}
+                          {iteration.duty_cycle_before}, nozzle {iteration.nozzle_before}
+                        </p>
+                        <p>
+                          After: power {iteration.power_after}, speed {iteration.speed_after}, frequency{' '}
+                          {iteration.frequency_after}, pressure {iteration.pressure_after}, focus{' '}
+                          {iteration.focus_after}, height {iteration.height_after}, duty_cycle{' '}
+                          {iteration.duty_cycle_after}, nozzle {iteration.nozzle_after}
+                        </p>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </>
+          ) : (
+            <section className="card">
+              <p className="muted">No session loaded yet. Create or load a session to see details and history.</p>
+            </section>
+          )}
+        </>
+      )}
+
+      {activeTab === 'operator' && (
+        <>
+          {!currentSession ? (
+            <section className="card">
+              <h2>Operator workflow</h2>
+              <p className="muted">Load or create a session in the Sessions tab to start operator tuning.</p>
+            </section>
+          ) : (
           <section className="card">
             <h2>Operator workflow</h2>
             <p className="session-meta">
@@ -966,37 +1052,7 @@ export default function App() {
               Confirm test result
             </button>
           </section>
-
-          <section className="card">
-            <h2>Iterations (ordered by step_number)</h2>
-            {orderedIterations.length === 0 ? (
-              <p>No iterations yet.</p>
-            ) : (
-              <div className="iterations">
-                {orderedIterations.map((iteration) => (
-                  <article key={iteration.id}>
-                    <h3>
-                      Step {iteration.step_number} · defect {iteration.defect_code} · severity{' '}
-                      {iteration.severity_level}
-                    </h3>
-                    <p>Created at: {new Date(iteration.created_at).toLocaleString()}</p>
-                    <p>
-                      Before: power {iteration.power_before}, speed {iteration.speed_before}, frequency{' '}
-                      {iteration.frequency_before}, pressure {iteration.pressure_before}, focus{' '}
-                      {iteration.focus_before}, height {iteration.height_before}, duty_cycle{' '}
-                      {iteration.duty_cycle_before}, nozzle {iteration.nozzle_before}
-                    </p>
-                    <p>
-                      After: power {iteration.power_after}, speed {iteration.speed_after}, frequency{' '}
-                      {iteration.frequency_after}, pressure {iteration.pressure_after}, focus{' '}
-                      {iteration.focus_after}, height {iteration.height_after}, duty_cycle{' '}
-                      {iteration.duty_cycle_after}, nozzle {iteration.nozzle_after}
-                    </p>
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
+          )}
         </>
       )}
     </main>
