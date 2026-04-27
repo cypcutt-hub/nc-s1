@@ -50,6 +50,13 @@ class ParsedBaseModeRow:
     cutting_height_mm: float
     duty_cycle_percent: float | None
     nozzle_diameter_mm: float
+    trust_level: int
+
+
+MATERIAL_GROUP_ALIASES = {
+    "carbon_steel": "carbon",
+    "stainless_steel": "stainless",
+}
 
 
 def _as_required_text(value: str | None, column: str, row_number: int) -> str:
@@ -66,16 +73,43 @@ def _as_float(value: str | None, column: str, row_number: int, *, allow_empty: b
             return None
         raise BaseModesImportError(f"Row {row_number}: '{column}' is required")
 
+    normalized = text.replace(",", ".")
+
     try:
-        return float(text)
+        return float(normalized)
     except ValueError as exc:
         raise BaseModesImportError(f"Row {row_number}: '{column}' must be numeric, got '{text}'") from exc
+
+
+def _as_trust_level(value: str | None, row_number: int) -> int:
+    text = (value or "").strip()
+    if not text:
+        return DEFAULT_TRUST_LEVEL
+
+    try:
+        trust_level = int(text)
+    except ValueError as exc:
+        raise BaseModesImportError(
+            f"Row {row_number}: 'trust_level' must be an integer between 1 and 100, got '{text}'"
+        ) from exc
+
+    if trust_level < 1 or trust_level > 100:
+        raise BaseModesImportError(
+            f"Row {row_number}: 'trust_level' must be in range 1..100, got '{trust_level}'"
+        )
+    return trust_level
+
+
+def _normalize_material_group(material_group: str) -> str:
+    return MATERIAL_GROUP_ALIASES.get(material_group.strip().lower(), material_group.strip().lower())
 
 
 def parse_csv_row(row: dict[str, str], row_number: int) -> ParsedBaseModeRow:
     return ParsedBaseModeRow(
         machine_name=_as_required_text(row.get("machine_name"), "machine_name", row_number),
-        material_group=_as_required_text(row.get("material_group"), "material_group", row_number),
+        material_group=_normalize_material_group(
+            _as_required_text(row.get("material_group"), "material_group", row_number)
+        ),
         gas_branch=_as_required_text(row.get("gas_branch"), "gas_branch", row_number),
         thickness_mm=float(_as_float(row.get("thickness_mm"), "thickness_mm", row_number)),
         power_percent=float(_as_float(row.get("power"), "power", row_number)),
@@ -86,6 +120,7 @@ def parse_csv_row(row: dict[str, str], row_number: int) -> ParsedBaseModeRow:
         cutting_height_mm=float(_as_float(row.get("height"), "height", row_number)),
         duty_cycle_percent=_as_float(row.get("duty_cycle"), "duty_cycle", row_number, allow_empty=True),
         nozzle_diameter_mm=float(_as_float(row.get("nozzle"), "nozzle", row_number)),
+        trust_level=_as_trust_level(row.get("trust_level"), row_number),
     )
 
 
@@ -93,8 +128,17 @@ def load_csv_rows(csv_path: Path) -> list[ParsedBaseModeRow]:
     if not csv_path.exists():
         raise BaseModesImportError(f"CSV file not found: {csv_path}")
 
-    with csv_path.open("r", encoding="utf-8", newline="") as file:
-        reader = csv.DictReader(file)
+    with csv_path.open("r", encoding="utf-8-sig", newline="") as file:
+        sample = file.read(4096)
+        file.seek(0)
+
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters=",;")
+            delimiter = dialect.delimiter
+        except csv.Error:
+            delimiter = ","
+
+        reader = csv.DictReader(file, delimiter=delimiter)
         if reader.fieldnames is None:
             raise BaseModesImportError("CSV file is empty or missing header")
 
@@ -170,7 +214,7 @@ def upsert_base_modes(rows: list[ParsedBaseModeRow]) -> int:
                 "cutting_height_mm": row.cutting_height_mm,
                 "duty_cycle_percent": row.duty_cycle_percent,
                 "nozzle_diameter_mm": row.nozzle_diameter_mm,
-                "trust_level": DEFAULT_TRUST_LEVEL,
+                "trust_level": row.trust_level,
             }
 
             if existing is None:
