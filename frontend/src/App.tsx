@@ -173,7 +173,7 @@ export default function App() {
   })
   const [editingRuleId, setEditingRuleId] = useState<number | null>(null)
   const [editRule, setEditRule] = useState<RecommendationRule | null>(null)
-  const [activeTab, setActiveTab] = useState<TopLevelTab>('operator')
+  const [activeTab, setActiveTab] = useState<TopLevelTab>('sessions')
 
   const orderedIterations = useMemo(() => {
     if (!currentSession) return []
@@ -242,7 +242,8 @@ export default function App() {
       setStepNumber(1)
       setRecommendation(null)
       setRecommendationCopied(false)
-      setMessage(`Session #${created.id} created.`)
+      setActiveTab('operator')
+      setMessage('Session created. You can start tuning.')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create session')
     } finally {
@@ -283,7 +284,8 @@ export default function App() {
       }
       setRecommendation(null)
       setRecommendationCopied(false)
-      setMessage(`Session #${data.id} loaded.`)
+      setActiveTab('operator')
+      setMessage('Session loaded. You can continue tuning.')
     } catch (e) {
       setCurrentSession(null)
       setError(e instanceof Error ? e.message : 'Failed to load session')
@@ -925,7 +927,10 @@ export default function App() {
           {!currentSession ? (
             <section className="card">
               <h2>Operator workflow</h2>
-              <p className="muted">Load or create a session in the Sessions tab to start operator tuning.</p>
+              <p className="muted">Create or load a session first</p>
+              <button type="button" onClick={() => setActiveTab('sessions')}>
+                Go to Sessions
+              </button>
             </section>
           ) : (
           <section className="card">
