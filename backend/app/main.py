@@ -12,6 +12,7 @@ from app.models import (
     RecommendationRule,
 )
 from app.schemas import (
+    DictionaryItem,
     CutIterationCreate,
     CutIterationRead,
     BaseModeRead,
@@ -28,6 +29,28 @@ from app.services import build_recommendation, build_recommendation_from_iterati
 
 app = FastAPI(title="NeuroCut API")
 
+MACHINE_DICTIONARY = [
+    DictionaryItem(
+        value="HSG_3kW_150mm_VSX_NC30E",
+        label_ru="HSG 3 кВт, линза 150 мм, голова VSX NC30E",
+    )
+]
+MATERIAL_DICTIONARY = [
+    DictionaryItem(value="carbon", label_ru="Углеродистая сталь"),
+    DictionaryItem(value="stainless", label_ru="Нержавеющая сталь"),
+    DictionaryItem(value="aluminum", label_ru="Алюминий"),
+]
+GAS_DICTIONARY = [
+    DictionaryItem(value="O2", label_ru="Кислород O2"),
+    DictionaryItem(value="N2", label_ru="Азот N2"),
+    DictionaryItem(value="air", label_ru="Воздух"),
+]
+DEFECT_DICTIONARY = [
+    DictionaryItem(value="burr", label_ru="Грат снизу"),
+    DictionaryItem(value="no_cut", label_ru="Непрорез"),
+    DictionaryItem(value="overburn", label_ru="Пережог / оплавление"),
+]
+
 
 @app.get("/health")
 def health_check() -> dict[str, str]:
@@ -42,6 +65,46 @@ def db_health_check() -> dict[str, str]:
         return {"status": "ok"}
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=503, detail="database unavailable") from exc
+
+
+@app.get("/dict/machines", response_model=list[DictionaryItem])
+def list_machines() -> list[DictionaryItem]:
+    return MACHINE_DICTIONARY
+
+
+@app.get("/dict/materials", response_model=list[DictionaryItem])
+def list_materials() -> list[DictionaryItem]:
+    return MATERIAL_DICTIONARY
+
+
+@app.get("/dict/gases", response_model=list[DictionaryItem])
+def list_gases() -> list[DictionaryItem]:
+    return GAS_DICTIONARY
+
+
+@app.get("/dict/defects", response_model=list[DictionaryItem])
+def list_defects() -> list[DictionaryItem]:
+    return DEFECT_DICTIONARY
+
+
+@app.get("/dictionaries/machines", response_model=list[DictionaryItem], include_in_schema=False)
+def list_machines_legacy() -> list[DictionaryItem]:
+    return list_machines()
+
+
+@app.get("/dictionaries/materials", response_model=list[DictionaryItem], include_in_schema=False)
+def list_materials_legacy() -> list[DictionaryItem]:
+    return list_materials()
+
+
+@app.get("/dictionaries/gases", response_model=list[DictionaryItem], include_in_schema=False)
+def list_gases_legacy() -> list[DictionaryItem]:
+    return list_gases()
+
+
+@app.get("/dictionaries/defects", response_model=list[DictionaryItem], include_in_schema=False)
+def list_defects_legacy() -> list[DictionaryItem]:
+    return list_defects()
 
 
 @app.post("/sessions", response_model=CutSessionRead, status_code=201)
@@ -98,7 +161,7 @@ def get_base_mode(session_id: int) -> BaseModeRead:
                 height=exact_mode.cutting_height_mm,
                 duty_cycle=exact_mode.duty_cycle_percent or 0.0,
                 nozzle=exact_mode.nozzle_diameter_mm,
-                explanation="Exact match used",
+                explanation="Использовано точное совпадение",
             )
 
         nearest_mode = (
@@ -133,8 +196,8 @@ def get_base_mode(session_id: int) -> BaseModeRead:
             duty_cycle=nearest_mode.duty_cycle_percent or 0.0,
             nozzle=nearest_mode.nozzle_diameter_mm,
             explanation=(
-                f"Nearest thickness {nearest_mode.thickness_mm:g} used instead of "
-                f"{session.thickness_mm:g}"
+                f"Использована ближайшая толщина {nearest_mode.thickness_mm:g} мм вместо "
+                f"{session.thickness_mm:g} мм"
             ),
         )
 

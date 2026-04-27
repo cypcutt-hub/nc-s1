@@ -236,6 +236,51 @@ def test_create_session(client: TestClient) -> None:
     assert body["gas_branch"] == "N2"
 
 
+def test_list_machines_dictionary(client: TestClient) -> None:
+    response = client.get("/dict/machines")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "value": "HSG_3kW_150mm_VSX_NC30E",
+            "label_ru": "HSG 3 кВт, линза 150 мм, голова VSX NC30E",
+        }
+    ]
+
+
+def test_list_materials_dictionary(client: TestClient) -> None:
+    response = client.get("/dict/materials")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"value": "carbon", "label_ru": "Углеродистая сталь"},
+        {"value": "stainless", "label_ru": "Нержавеющая сталь"},
+        {"value": "aluminum", "label_ru": "Алюминий"},
+    ]
+
+
+def test_list_gases_dictionary(client: TestClient) -> None:
+    response = client.get("/dict/gases")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"value": "O2", "label_ru": "Кислород O2"},
+        {"value": "N2", "label_ru": "Азот N2"},
+        {"value": "air", "label_ru": "Воздух"},
+    ]
+
+
+def test_list_defects_dictionary(client: TestClient) -> None:
+    response = client.get("/dict/defects")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"value": "burr", "label_ru": "Грат снизу"},
+        {"value": "no_cut", "label_ru": "Непрорез"},
+        {"value": "overburn", "label_ru": "Пережог / оплавление"},
+    ]
+
+
 def test_read_session_with_empty_iterations(client: TestClient) -> None:
     session = _create_session(client)
 
@@ -350,7 +395,7 @@ def test_get_base_mode_exact_match(client: TestClient) -> None:
     assert body["height"] == 0.9
     assert body["duty_cycle"] == 80.0
     assert body["nozzle"] == 1.4
-    assert body["explanation"] == "Exact match used"
+    assert body["explanation"] == "Использовано точное совпадение"
 
 
 def test_get_base_mode_falls_back_to_nearest_thickness(client: TestClient) -> None:
@@ -365,7 +410,7 @@ def test_get_base_mode_falls_back_to_nearest_thickness(client: TestClient) -> No
     assert body["power"] == 88.0
     assert body["speed"] == 3.1
     assert body["nozzle"] == 1.5
-    assert body["explanation"] == "Nearest thickness 4 used instead of 4.4"
+    assert body["explanation"] == "Использована ближайшая толщина 4 мм вместо 4.4 мм"
 
 
 def test_get_base_mode_no_match_returns_404(client: TestClient) -> None:

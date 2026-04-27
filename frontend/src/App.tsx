@@ -57,6 +57,11 @@ type ApiError = {
   detail?: string
 }
 
+type DictionaryItem = {
+  value: string
+  label_ru: string
+}
+
 type Recommendation = {
   power_after: number
   speed_after: number
@@ -102,7 +107,7 @@ type RecommendationRuleCreate = {
   is_active: boolean
 }
 
-type TopLevelTab = 'operator' | 'sessions' | 'rules'
+type TopLevelTab = 'operator' | 'sessions' | 'admin'
 
 const API_BASE = import.meta.env.VITE_API_BASE_PATH ?? '/api'
 
@@ -117,7 +122,6 @@ const MODE_KEYS: Array<keyof ModeVector> = [
   'nozzle',
 ]
 
-const DEFECT_OPTIONS = ['burr', 'no_cut', 'overburn']
 const RULE_PARAMETER_OPTIONS: RuleParameter[] = [
   'power',
   'speed',
@@ -142,13 +146,23 @@ const DEFAULT_MODE: ModeVector = {
 }
 
 const emptyRecommendationMode = (): ModeVector => ({ ...DEFAULT_MODE })
+const emptyDictionary = (): DictionaryItem[] => []
+const DEFAULT_MACHINE = 'HSG_3kW_150mm_VSX_NC30E'
+const DEFAULT_MATERIAL = 'carbon'
+const DEFAULT_GAS = 'N2'
+
+const DEFECT_LABELS: Record<string, string> = {
+  burr: 'Грат снизу',
+  no_cut: 'Непрорез',
+  overburn: 'Пережог / оплавление',
+}
 
 export default function App() {
   const [sessionForm, setSessionForm] = useState<CutSessionCreate>({
-    machine_name: '',
-    material_group: '',
+    machine_name: DEFAULT_MACHINE,
+    material_group: DEFAULT_MATERIAL,
     thickness_mm: 1,
-    gas_branch: '',
+    gas_branch: DEFAULT_GAS,
   })
   const [sessionIdInput, setSessionIdInput] = useState('')
   const [currentSession, setCurrentSession] = useState<CutSession | null>(null)
@@ -166,10 +180,14 @@ export default function App() {
   const [message, setMessage] = useState<string | null>(null)
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null)
   const [recommendationCopied, setRecommendationCopied] = useState(false)
+  const [machines, setMachines] = useState<DictionaryItem[]>(emptyDictionary)
+  const [materials, setMaterials] = useState<DictionaryItem[]>(emptyDictionary)
+  const [gases, setGases] = useState<DictionaryItem[]>(emptyDictionary)
+  const [defects, setDefects] = useState<DictionaryItem[]>(emptyDictionary)
   const [rules, setRules] = useState<RecommendationRule[]>([])
   const [rulesLoading, setRulesLoading] = useState(false)
   const [newRule, setNewRule] = useState<RecommendationRuleCreate>({
-    defect_code: DEFECT_OPTIONS[0],
+    defect_code: 'burr',
     parameter: RULE_PARAMETER_OPTIONS[0],
     direction: RULE_DIRECTION_OPTIONS[0],
     base_delta: 1,
@@ -191,7 +209,58 @@ export default function App() {
 
   useEffect(() => {
     void loadRules()
+    void loadDictionaries()
   }, [])
+
+  function defectLabel(code: string): string {
+    return defects.find((item) => item.value === code)?.label_ru ?? DEFECT_LABELS[code] ?? code
+  }
+
+  async function loadDictionaries() {
+    try {
+      const [machinesResponse, materialsResponse, gasesResponse, defectsResponse] = await Promise.all([
+        fetch(`${API_BASE}/dict/machines`),
+        fetch(`${API_BASE}/dict/materials`),
+        fetch(`${API_BASE}/dict/gases`),
+        fetch(`${API_BASE}/dict/defects`),
+      ])
+
+      if (!machinesResponse.ok || !materialsResponse.ok || !gasesResponse.ok || !defectsResponse.ok) {
+        throw new Error('Не удалось загрузить справочники')
+      }
+
+      const machineOptions = (await machinesResponse.json()) as DictionaryItem[]
+      const materialOptions = (await materialsResponse.json()) as DictionaryItem[]
+      const gasOptions = (await gasesResponse.json()) as DictionaryItem[]
+      const defectOptions = (await defectsResponse.json()) as DictionaryItem[]
+
+      setMachines(machineOptions)
+      setMaterials(materialOptions)
+      setGases(gasOptions)
+      setDefects(defectOptions)
+      setDefectCode((prev) => (defectOptions.some((item) => item.value === prev) ? prev : (defectOptions[0]?.value ?? prev)))
+      setNewRule((prev) => ({
+        ...prev,
+        defect_code: defectOptions.some((item) => item.value === prev.defect_code)
+          ? prev.defect_code
+          : (defectOptions[0]?.value ?? prev.defect_code),
+      }))
+      setSessionForm((prev) => ({
+        ...prev,
+        machine_name: machineOptions.some((item) => item.value === prev.machine_name)
+          ? prev.machine_name
+          : (machineOptions.find((item) => item.value === DEFAULT_MACHINE)?.value ?? machineOptions[0]?.value ?? prev.machine_name),
+        material_group: materialOptions.some((item) => item.value === prev.material_group)
+          ? prev.material_group
+          : (materialOptions.find((item) => item.value === DEFAULT_MATERIAL)?.value ?? materialOptions[0]?.value ?? prev.material_group),
+        gas_branch: gasOptions.some((item) => item.value === prev.gas_branch)
+          ? prev.gas_branch
+          : (gasOptions.find((item) => item.value === DEFAULT_GAS)?.value ?? gasOptions[0]?.value ?? prev.gas_branch),
+      }))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Не удалось загрузить справочники')
+    }
+  }
 
   async function loadRules() {
     setRulesLoading(true)
@@ -206,7 +275,7 @@ export default function App() {
       const data = (await response.json()) as RecommendationRule[]
       setRules(data)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load rules')
+      setError(e instanceof Error ? e.message : 'Не удалось загрузить правила')
     } finally {
       setRulesLoading(false)
     }
@@ -219,7 +288,7 @@ export default function App() {
     } catch {
       // ignore parse errors
     }
-    return `Request failed with status ${response.status}`
+    return `Ошибка запроса, статус ${response.status}`
   }
 
   async function createSession(event: FormEvent<HTMLFormElement>) {
@@ -247,9 +316,9 @@ export default function App() {
       setRecommendation(null)
       setRecommendationCopied(false)
       setActiveTab('operator')
-      setMessage('Session created. You can start tuning.')
+      setMessage('Сессия создана. Можно начинать настройку.')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create session')
+      setError(e instanceof Error ? e.message : 'Не удалось создать сессию')
     } finally {
       setIsLoading(false)
     }
@@ -289,10 +358,10 @@ export default function App() {
       setRecommendation(null)
       setRecommendationCopied(false)
       setActiveTab('operator')
-      setMessage('Session loaded. You can continue tuning.')
+      setMessage('Сессия загружена. Можно продолжать настройку.')
     } catch (e) {
       setCurrentSession(null)
-      setError(e instanceof Error ? e.message : 'Failed to load session')
+      setError(e instanceof Error ? e.message : 'Не удалось загрузить сессию')
     } finally {
       setIsLoading(false)
     }
@@ -334,11 +403,11 @@ export default function App() {
       }
       setRecommendedMode(newMode)
       setRecommendation(data)
-      setMessage(`Recommendation ready for defect "${defectCode}" (severity ${defectSeverity}).`)
+      setMessage(`Рекомендация готова: дефект «${defectLabel(defectCode)}», уровень ${defectSeverity}.`)
     } catch (e) {
       setRecommendation(null)
       setRecommendedMode(emptyRecommendationMode())
-      setError(e instanceof Error ? e.message : 'Failed to get recommendation')
+      setError(e instanceof Error ? e.message : 'Не удалось получить рекомендацию')
     } finally {
       setIsLoading(false)
     }
@@ -368,9 +437,9 @@ export default function App() {
         duty_cycle: data.duty_cycle,
         nozzle: data.nozzle,
       })
-      setMessage(data.explanation === 'Exact match used' ? 'Base mode loaded' : data.explanation)
+      setMessage(data.explanation === 'Использовано точное совпадение' ? 'Стартовый режим загружен' : data.explanation)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load base mode')
+      setError(e instanceof Error ? e.message : 'Не удалось загрузить стартовый режим')
     } finally {
       setIsLoading(false)
     }
@@ -440,9 +509,9 @@ export default function App() {
       setCurrentMode({ ...recommendedMode })
       setRecommendation(null)
       setRecommendationCopied(false)
-      setMessage(`Test result saved. Step ${created.step_number} recorded.`)
+      setMessage(`Результат теста сохранён. Записан шаг ${created.step_number}.`)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save test result')
+      setError(e instanceof Error ? e.message : 'Не удалось сохранить результат теста')
     } finally {
       setIsLoading(false)
     }
@@ -451,7 +520,7 @@ export default function App() {
   async function createRule(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (newRule.base_delta <= 0) {
-      setError('base_delta must be greater than 0')
+      setError('base_delta должен быть больше 0')
       return
     }
 
@@ -472,7 +541,7 @@ export default function App() {
 
       const created = (await response.json()) as RecommendationRule
       setRules((prev) => [...prev, created].sort((a, b) => a.id - b.id))
-      setMessage(`Rule #${created.id} created.`)
+      setMessage(`Правило #${created.id} создано.`)
       setNewRule({
         defect_code: newRule.defect_code,
         parameter: RULE_PARAMETER_OPTIONS[0],
@@ -481,7 +550,7 @@ export default function App() {
         is_active: true,
       })
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create rule')
+      setError(e instanceof Error ? e.message : 'Не удалось создать правило')
     } finally {
       setRulesLoading(false)
     }
@@ -499,7 +568,7 @@ export default function App() {
 
   async function saveRule(ruleId: number) {
     if (!editRule || editRule.base_delta <= 0) {
-      setError('base_delta must be greater than 0')
+      setError('base_delta должен быть больше 0')
       return
     }
 
@@ -525,9 +594,9 @@ export default function App() {
       setRules((prev) => prev.map((rule) => (rule.id === ruleId ? updated : rule)))
       setEditingRuleId(null)
       setEditRule(null)
-      setMessage(`Rule #${updated.id} saved.`)
+      setMessage(`Правило #${updated.id} сохранено.`)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to update rule')
+      setError(e instanceof Error ? e.message : 'Не удалось обновить правило')
     } finally {
       setRulesLoading(false)
     }
@@ -549,9 +618,9 @@ export default function App() {
 
       const updated = (await response.json()) as RecommendationRule
       setRules((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
-      setMessage(`Rule #${updated.id} ${updated.is_active ? 'enabled' : 'disabled'}.`)
+      setMessage(`Правило #${updated.id} ${updated.is_active ? 'включено' : 'отключено'}.`)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to toggle rule status')
+      setError(e instanceof Error ? e.message : 'Не удалось изменить статус правила')
     } finally {
       setRulesLoading(false)
     }
@@ -559,7 +628,7 @@ export default function App() {
 
   async function removeRule(rule: RecommendationRule) {
     const shouldDelete = window.confirm(
-      `Delete rule #${rule.id} (${rule.defect_code} / ${rule.parameter})? This action cannot be undone.`,
+      `Удалить правило #${rule.id} (${defectLabel(rule.defect_code)} / ${rule.parameter})? Действие нельзя отменить.`,
     )
     if (!shouldDelete) return
 
@@ -575,12 +644,12 @@ export default function App() {
       }
 
       setRules((prev) => prev.filter((item) => item.id !== rule.id))
-      setMessage(`Rule #${rule.id} deleted.`)
+      setMessage(`Правило #${rule.id} удалено.`)
       if (editingRuleId === rule.id) {
         cancelEditRule()
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to delete rule')
+      setError(e instanceof Error ? e.message : 'Не удалось удалить правило')
     } finally {
       setRulesLoading(false)
     }
@@ -597,63 +666,63 @@ export default function App() {
 
   return (
     <main className="page">
-      <h1>NeuroCut Operator Tuning</h1>
-      <p className="subtitle">Session API demo: recommendation loop for manual shop-floor tuning.</p>
-      <nav className="tabs" aria-label="Main sections">
+      <h1>NeuroCut — интерфейс настройки</h1>
+      <p className="subtitle">Операторский интерфейс: подбор режима резки по шагам.</p>
+      <nav className="tabs" aria-label="Главные разделы">
         <button
           type="button"
           className={activeTab === 'operator' ? 'ghost active' : 'ghost'}
           onClick={() => setActiveTab('operator')}
         >
-          Operator
+          Настройка
         </button>
         <button
           type="button"
           className={activeTab === 'sessions' ? 'ghost active' : 'ghost'}
           onClick={() => setActiveTab('sessions')}
         >
-          Sessions
+          Сессии
         </button>
         <button
           type="button"
-          className={activeTab === 'rules' ? 'ghost active' : 'ghost'}
-          onClick={() => setActiveTab('rules')}
+          className={activeTab === 'admin' ? 'ghost active' : 'ghost'}
+          onClick={() => setActiveTab('admin')}
         >
-          Rules
+          Админ
         </button>
       </nav>
 
-      {error && <p className="alert error">Error: {error}</p>}
+      {error && <p className="alert error">Ошибка: {error}</p>}
       {message && <p className="alert success">{message}</p>}
 
-      {activeTab === 'rules' && (
+      {activeTab === 'admin' && (
         <section className="card">
-          <h2>Algorithm rules</h2>
-          <p className="muted">Manage recommendation rules stored in DB.</p>
+          <h2>Админ: правила алгоритма</h2>
+          <p className="muted">Технический раздел для инженера/технолога. Оператору обычно не нужен.</p>
           <div className="row">
             <button type="button" onClick={loadRules} disabled={rulesLoading}>
-              Refresh rules
+              Обновить правила
             </button>
           </div>
 
-          <h3>Create rule</h3>
+          <h3>Создать правило</h3>
           <form onSubmit={createRule} className="grid rule-grid">
             <label>
-              Defect code
-              <input
-                list="rule-defect-codes"
+              Дефект
+              <select
                 value={newRule.defect_code}
                 onChange={(event) => setNewRule({ ...newRule, defect_code: event.target.value })}
                 required
-              />
-              <datalist id="rule-defect-codes">
-                {DEFECT_OPTIONS.map((item) => (
-                  <option key={`rule-${item}`} value={item} />
+              >
+                {defects.map((item) => (
+                  <option key={`rule-${item.value}`} value={item.value}>
+                    {item.label_ru}
+                  </option>
                 ))}
-              </datalist>
+              </select>
             </label>
             <label>
-              Parameter
+              Параметр
               <select
                 value={newRule.parameter}
                 onChange={(event) =>
@@ -669,7 +738,7 @@ export default function App() {
               </select>
             </label>
             <label>
-              Direction
+              Направление
               <select
                 value={newRule.direction}
                 onChange={(event) =>
@@ -685,7 +754,7 @@ export default function App() {
               </select>
             </label>
             <label>
-              Base delta
+              Базовое изменение
               <input
                 type="number"
                 min="0.000001"
@@ -701,28 +770,28 @@ export default function App() {
                 checked={newRule.is_active}
                 onChange={(event) => setNewRule({ ...newRule, is_active: event.target.checked })}
               />
-              Active
+              Активно
             </label>
             <button type="submit" disabled={rulesLoading}>
-              Add rule
+              Добавить правило
             </button>
           </form>
 
-          <h3>Rules</h3>
+          <h3>Правила</h3>
           {rules.length === 0 ? (
-            <p className="muted">No rules loaded yet. Click “Refresh rules”.</p>
+            <p className="muted">Правила не загружены. Нажмите «Обновить правила».</p>
           ) : (
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
                     <th>ID</th>
-                    <th>Defect</th>
-                    <th>Parameter</th>
-                    <th>Direction</th>
-                    <th>Base delta</th>
-                    <th>Active</th>
-                    <th>Actions</th>
+                    <th>Дефект</th>
+                    <th>Параметр</th>
+                    <th>Направление</th>
+                    <th>Базовое изменение</th>
+                    <th>Активно</th>
+                    <th>Действия</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -731,7 +800,7 @@ export default function App() {
                     return (
                       <tr key={rule.id}>
                         <td>{rule.id}</td>
-                        <td>{rule.defect_code}</td>
+                        <td>{defectLabel(rule.defect_code)}</td>
                         <td>
                           {isEditing ? (
                             <select
@@ -783,7 +852,7 @@ export default function App() {
                             rule.base_delta
                           )}
                         </td>
-                        <td>{isEditing ? (editRule.is_active ? 'yes' : 'no') : rule.is_active ? 'yes' : 'no'}</td>
+                        <td>{isEditing ? (editRule.is_active ? 'да' : 'нет') : rule.is_active ? 'да' : 'нет'}</td>
                         <td>
                           <div className="button-group">
                             {isEditing ? (
@@ -794,7 +863,7 @@ export default function App() {
                                   disabled={rulesLoading}
                                   className="ghost"
                                 >
-                                  Save
+                                  Сохранить
                                 </button>
                                 <button
                                   type="button"
@@ -802,7 +871,7 @@ export default function App() {
                                   disabled={rulesLoading}
                                   className="ghost"
                                 >
-                                  Cancel
+                                  Отмена
                                 </button>
                               </>
                             ) : (
@@ -812,7 +881,7 @@ export default function App() {
                                 disabled={rulesLoading}
                                 className="ghost"
                               >
-                                Edit
+                                Изменить
                               </button>
                             )}
                             <button
@@ -821,7 +890,7 @@ export default function App() {
                               disabled={rulesLoading}
                               className="ghost"
                             >
-                              {rule.is_active ? 'Disable' : 'Enable'}
+                              {rule.is_active ? 'Отключить' : 'Включить'}
                             </button>
                             <button
                               type="button"
@@ -829,7 +898,7 @@ export default function App() {
                               disabled={rulesLoading}
                               className="ghost danger"
                             >
-                              Delete
+                              Удалить
                             </button>
                           </div>
                         </td>
@@ -846,26 +915,40 @@ export default function App() {
       {activeTab === 'sessions' && (
         <>
           <section className="card">
-            <h2>Create session</h2>
+            <h2>Создать сессию</h2>
             <form onSubmit={createSession} className="grid">
               <label>
-                Machine name
-                <input
+                Станок
+                <select
                   value={sessionForm.machine_name}
                   onChange={(event) => setSessionForm({ ...sessionForm, machine_name: event.target.value })}
                   required
-                />
+                >
+                  {machines.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label_ru}
+                    </option>
+                  ))}
+                </select>
+                <p className="muted">Выберите ваш станок из списка. Значение применяется как стандарт машины.</p>
               </label>
               <label>
-                Material group
-                <input
+                Материал
+                <select
                   value={sessionForm.material_group}
                   onChange={(event) => setSessionForm({ ...sessionForm, material_group: event.target.value })}
                   required
-                />
+                >
+                  {materials.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label_ru}
+                    </option>
+                  ))}
+                </select>
+                <p className="muted">Например: углеродистая сталь для типовых заказов.</p>
               </label>
               <label>
-                Thickness (mm)
+                Толщина (мм)
                 <input
                   type="number"
                   min="0.01"
@@ -876,34 +959,42 @@ export default function App() {
                   }
                   required
                 />
+                <p className="muted">Укажите фактическую толщину листа в миллиметрах (пример: 4.0).</p>
               </label>
               <label>
-                Gas branch
-                <input
+                Газ
+                <select
                   value={sessionForm.gas_branch}
                   onChange={(event) => setSessionForm({ ...sessionForm, gas_branch: event.target.value })}
                   required
-                />
+                >
+                  {gases.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label_ru}
+                    </option>
+                  ))}
+                </select>
+                <p className="muted">Выберите газ резки, который сейчас подключён к станку.</p>
               </label>
               <button type="submit" disabled={isLoading}>
-                Create session
+                Создать сессию
               </button>
             </form>
           </section>
 
           <section className="card">
-            <h2>Load session</h2>
+            <h2>Загрузить сессию</h2>
             <form onSubmit={loadSession} className="row">
               <input
                 type="number"
                 min="1"
                 value={sessionIdInput}
                 onChange={(event) => setSessionIdInput(event.target.value)}
-                placeholder="Session ID"
+                placeholder="ID сессии"
                 required
               />
               <button type="submit" disabled={isLoading}>
-                Load
+                Загрузить
               </button>
             </form>
           </section>
@@ -911,35 +1002,35 @@ export default function App() {
           {currentSession ? (
             <>
               <section className="card">
-                <h2>Session details</h2>
-                <p>Session ID: {currentSession.id}</p>
-                <p>Machine: {currentSession.machine_name}</p>
-                <p>Material group: {currentSession.material_group}</p>
-                <p>Thickness: {currentSession.thickness_mm} mm</p>
-                <p>Gas branch: {currentSession.gas_branch}</p>
-                <p>Created at: {new Date(currentSession.created_at).toLocaleString()}</p>
+                <h2>Детали сессии</h2>
+                <p>ID сессии: {currentSession.id}</p>
+                <p>Станок: {machines.find((item) => item.value === currentSession.machine_name)?.label_ru ?? currentSession.machine_name}</p>
+                <p>Материал: {materials.find((item) => item.value === currentSession.material_group)?.label_ru ?? currentSession.material_group}</p>
+                <p>Толщина: {currentSession.thickness_mm} мм</p>
+                <p>Газ: {gases.find((item) => item.value === currentSession.gas_branch)?.label_ru ?? currentSession.gas_branch}</p>
+                <p>Создано: {new Date(currentSession.created_at).toLocaleString()}</p>
               </section>
               <section className="card">
-                <h2>Iterations (ordered by step_number)</h2>
+                <h2>Итерации (по step_number)</h2>
                 {orderedIterations.length === 0 ? (
-                  <p>No iterations yet.</p>
+                  <p>Итераций пока нет.</p>
                 ) : (
                   <div className="iterations">
                     {orderedIterations.map((iteration) => (
                       <article key={iteration.id}>
                         <h3>
-                          Step {iteration.step_number} · defect {iteration.defect_code} · severity{' '}
+                          Шаг {iteration.step_number} · дефект {defectLabel(iteration.defect_code)} · уровень{' '}
                           {iteration.severity_level}
                         </h3>
-                        <p>Created at: {new Date(iteration.created_at).toLocaleString()}</p>
+                        <p>Создано: {new Date(iteration.created_at).toLocaleString()}</p>
                         <p>
-                          Before: power {iteration.power_before}, speed {iteration.speed_before}, frequency{' '}
+                          До: power {iteration.power_before}, speed {iteration.speed_before}, frequency{' '}
                           {iteration.frequency_before}, pressure {iteration.pressure_before}, focus{' '}
                           {iteration.focus_before}, height {iteration.height_before}, duty_cycle{' '}
                           {iteration.duty_cycle_before}, nozzle {iteration.nozzle_before}
                         </p>
                         <p>
-                          After: power {iteration.power_after}, speed {iteration.speed_after}, frequency{' '}
+                          После: power {iteration.power_after}, speed {iteration.speed_after}, frequency{' '}
                           {iteration.frequency_after}, pressure {iteration.pressure_after}, focus{' '}
                           {iteration.focus_after}, height {iteration.height_after}, duty_cycle{' '}
                           {iteration.duty_cycle_after}, nozzle {iteration.nozzle_after}
@@ -952,7 +1043,7 @@ export default function App() {
             </>
           ) : (
             <section className="card">
-              <p className="muted">No session loaded yet. Create or load a session to see details and history.</p>
+              <p className="muted">Сессия не выбрана. Создайте или загрузите сессию, чтобы увидеть историю.</p>
             </section>
           )}
         </>
@@ -962,23 +1053,29 @@ export default function App() {
         <>
           {!currentSession ? (
             <section className="card">
-              <h2>Operator workflow</h2>
-              <p className="muted">Create or load a session first</p>
+              <h2>Настройка</h2>
+              <p className="muted">Шаг 1: выберите сессию (создайте новую или загрузите существующую).</p>
+              <p className="muted">Шаг 2: загрузите стартовый режим.</p>
+              <p className="muted">Шаг 3: запустите цикл подбора и подтвердите результат реза.</p>
               <button type="button" onClick={() => setActiveTab('sessions')}>
-                Go to Sessions
+                Перейти в раздел «Сессии»
               </button>
             </section>
           ) : (
           <section className="card">
-            <h2>Operator workflow</h2>
+            <h2>Настройка</h2>
             <p className="session-meta">
-              Session #{currentSession.id} · Step {stepNumber} · Machine {currentSession.machine_name}
+              Сессия #{currentSession.id} · Шаг {stepNumber} · Станок{' '}
+              {machines.find((item) => item.value === currentSession.machine_name)?.label_ru ?? currentSession.machine_name}
             </p>
 
-            <h3>A) Current mode</h3>
+            <h3>Шаг 1. Проверка сессии</h3>
+            <p className="muted">Сессия выбрана. Проверьте станок, материал и газ перед запуском цикла.</p>
+
+            <h3>Шаг 2. Загрузите стартовый режим</h3>
             <div className="row">
               <button type="button" onClick={loadBaseMode} disabled={isLoading}>
-                Load base mode / Загрузить стартовый режим
+                Загрузить стартовый режим
               </button>
             </div>
             <div className="grid two-col">
@@ -995,23 +1092,26 @@ export default function App() {
               ))}
             </div>
 
-            <h3>B) Defect and severity</h3>
+            <h3>Шаг 3. Цикл настройки</h3>
+            <h4>3.1 Дефект и выраженность</h4>
             <div className="grid two-col">
               <label>
-                Defect code
-                <input
-                  list="defect-codes"
+                Дефект
+                <select
                   value={defectCode}
                   onChange={(event) => setDefectCode(event.target.value)}
-                />
-                <datalist id="defect-codes">
-                  {DEFECT_OPTIONS.map((item) => (
-                    <option key={item} value={item} />
+                >
+                  {defects.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label_ru}
+                    </option>
                   ))}
-                </datalist>
+                </select>
+                <p className="muted">Выберите дефект, который реально видите на детали после тестового реза.</p>
               </label>
               <div>
-                <p className="mini-label">Observed severity</p>
+                <p className="mini-label">Наблюдаемая выраженность</p>
+                <p className="muted">1 — слабо, 2 — средне, 3 — сильно.</p>
                 <div className="button-group">
                   {[1, 2, 3].map((value) => (
                     <button
@@ -1028,17 +1128,17 @@ export default function App() {
             </div>
 
             <button type="button" onClick={getRecommendation} disabled={isLoading}>
-              Get recommendation
+              Получить рекомендацию
             </button>
 
-            <h3>C) Next step recommendation</h3>
+            <h4>3.2 Рекомендация на следующий шаг</h4>
             {!recommendation ? (
-              <p className="muted">No recommendation yet. Click “Get recommendation”.</p>
+              <p className="muted">Пока нет рекомендации. Нажмите «Получить рекомендацию».</p>
             ) : (
               <div className="recommendation-box">
                 <p>
-                  Changed parameters:{' '}
-                  {recommendationDiff.length > 0 ? recommendationDiff.join(', ') : 'none (same as current mode)'}
+                  Изменённые параметры:{' '}
+                  {recommendationDiff.length > 0 ? recommendationDiff.join(', ') : 'нет (режим не изменился)'}
                 </p>
                 <ul>
                   {MODE_KEYS.map((key) => (
@@ -1047,55 +1147,55 @@ export default function App() {
                     </li>
                   ))}
                 </ul>
-                <h4>Explanation</h4>
+                <h4>Пояснение</h4>
                 <ul>
                   {recommendation.explanation.map((line, index) => (
                     <li key={`${index}-${line}`}>{line}</li>
                   ))}
                 </ul>
                 <button type="button" onClick={copyRecommendationToAfter} disabled={isLoading}>
-                  Copy recommended mode
+                  Скопировать рекомендованный режим
                 </button>
                 {recommendationCopied && (
-                  <p className="inline-success">Recommended mode copied for manual machine transfer.</p>
+                  <p className="inline-success">Рекомендованный режим скопирован для переноса на станок.</p>
                 )}
               </div>
             )}
 
-            <h3>D) Test cut result</h3>
-            <p className="muted">Operator runs test cut on machine manually, then confirms the result below.</p>
+            <h4>3.3 Результат тестового реза</h4>
+            <p className="muted">Оператор выполняет тестовый рез на станке и подтверждает результат ниже.</p>
             <div className="button-group">
               <button
                 type="button"
                 className={resultSeverity === 0 ? 'ghost active' : 'ghost'}
                 onClick={() => setResultSeverity(0)}
               >
-                0 fixed
+                0 исправлено
               </button>
               <button
                 type="button"
                 className={resultSeverity === 1 ? 'ghost active' : 'ghost'}
                 onClick={() => setResultSeverity(1)}
               >
-                1 weak
+                1 слабый
               </button>
               <button
                 type="button"
                 className={resultSeverity === 2 ? 'ghost active' : 'ghost'}
                 onClick={() => setResultSeverity(2)}
               >
-                2 medium
+                2 средний
               </button>
               <button
                 type="button"
                 className={resultSeverity === 3 ? 'ghost active' : 'ghost'}
                 onClick={() => setResultSeverity(3)}
               >
-                3 strong
+                3 сильный
               </button>
             </div>
             <button type="button" onClick={confirmTestResult} disabled={isLoading || !recommendation}>
-              Confirm test result
+              Подтвердить результат
             </button>
           </section>
           )}
