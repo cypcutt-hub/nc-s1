@@ -62,6 +62,11 @@ type DictionaryItem = {
   label: string
 }
 
+type NumericDictionaryItem = {
+  value: number
+  label: string
+}
+
 type Recommendation = {
   power_after: number
   speed_after: number
@@ -147,6 +152,7 @@ const DEFAULT_MODE: ModeVector = {
 
 const emptyRecommendationMode = (): ModeVector => ({ ...DEFAULT_MODE })
 const emptyDictionary = (): DictionaryItem[] => []
+const emptyNumericDictionary = (): NumericDictionaryItem[] => []
 
 const DEFECT_LABELS: Record<string, string> = {
   burr: 'Грат снизу',
@@ -180,6 +186,7 @@ export default function App() {
   const [machines, setMachines] = useState<DictionaryItem[]>(emptyDictionary)
   const [materials, setMaterials] = useState<DictionaryItem[]>(emptyDictionary)
   const [gases, setGases] = useState<DictionaryItem[]>(emptyDictionary)
+  const [thicknesses, setThicknesses] = useState<NumericDictionaryItem[]>(emptyNumericDictionary)
   const [defects, setDefects] = useState<DictionaryItem[]>(emptyDictionary)
   const [rules, setRules] = useState<RecommendationRule[]>([])
   const [rulesLoading, setRulesLoading] = useState(false)
@@ -208,6 +215,14 @@ export default function App() {
     void loadRules()
     void loadDictionaries()
   }, [])
+
+  useEffect(() => {
+    void loadThicknesses(
+      sessionForm.machine_name,
+      sessionForm.material_group,
+      sessionForm.gas_branch,
+    )
+  }, [sessionForm.machine_name, sessionForm.material_group, sessionForm.gas_branch])
 
   function defectLabel(code: string): string {
     return defects.find((item) => item.value === code)?.label ?? DEFECT_LABELS[code] ?? code
@@ -278,6 +293,41 @@ export default function App() {
     }
   }
 
+  async function loadThicknesses(machine_name: string, material_group: string, gas_branch: string) {
+    if (!machine_name || !material_group || !gas_branch) {
+      setThicknesses([])
+      return
+    }
+
+    try {
+      const params = new URLSearchParams({
+        machine_name,
+        material_group,
+        gas_branch,
+      })
+      const response = await fetch(`${API_BASE}/dict/thicknesses?${params.toString()}`)
+      if (!response.ok) {
+        throw new Error(await readError(response))
+      }
+
+      const options = (await response.json()) as NumericDictionaryItem[]
+      setThicknesses(options)
+      setSessionForm((prev) => {
+        if (options.length === 0) {
+          return prev
+        }
+        const hasCurrentThickness = options.some((item) => item.value === prev.thickness_mm)
+        return {
+          ...prev,
+          thickness_mm: hasCurrentThickness ? prev.thickness_mm : options[0].value,
+        }
+      })
+    } catch (e) {
+      setThicknesses([])
+      setError(e instanceof Error ? e.message : 'Не удалось загрузить толщины')
+    }
+  }
+
   async function readError(response: Response): Promise<string> {
     try {
       const payload = (await response.json()) as ApiError
@@ -290,6 +340,10 @@ export default function App() {
 
   async function createSession(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (thicknesses.length === 0) {
+      setError('Для выбранной комбинации нет доступных толщин. Создание сессии запрещено.')
+      return
+    }
     setIsLoading(true)
     setError(null)
     setMessage(null)
@@ -944,16 +998,19 @@ export default function App() {
               </label>
               <label>
                 Толщина (мм)
-                <input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
+                <select
                   value={sessionForm.thickness_mm}
                   onChange={(event) =>
                     setSessionForm({ ...sessionForm, thickness_mm: Number(event.target.value) })
                   }
                   required
-                />
+                >
+                  {thicknesses.map((item) => (
+                    <option key={`thickness-${item.value}`} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
                 Газ
@@ -969,10 +1026,15 @@ export default function App() {
                   ))}
                 </select>
               </label>
-              <button type="submit" disabled={isLoading}>
+              <button type="submit" disabled={isLoading || thicknesses.length === 0}>
                 Создать сессию
               </button>
             </form>
+            {thicknesses.length === 0 && (
+              <p className="alert error">
+                Для выбранной комбинации станка/материала/газа нет доступных толщин.
+              </p>
+            )}
           </section>
 
           <section className="card">

@@ -1,5 +1,6 @@
 from app.schemas.sessions import (
     DictionaryItem,
+    NumericDictionaryItem,
     CutIterationCreate,
     CutIterationRead,
     BaseModeRead,
@@ -17,6 +18,7 @@ from app.schemas.sessions import (
 
 __all__ = [
     "DictionaryItem",
+    "NumericDictionaryItem",
     "CutSessionCreate",
     "CutSessionRead",
     "CutIterationCreate",

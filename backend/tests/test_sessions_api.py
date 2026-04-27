@@ -23,7 +23,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]
 
     with testing_session_local() as db:
         machine = Machine(
-            name="Machine A",
+            name="HSG_3kW_150mm_VSX_NC30E",
             model="Model A",
             laser_power_w=3000,
             lens_focal_length_mm=150,
@@ -107,9 +107,9 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]
         db.add_all(
             [
                 BaseMode(
-                    material_id=steel.id,
+                    material_id=stainless.id,
                     machine_id=machine.id,
-                    thickness_mm=2.5,
+                    thickness_mm=2.0,
                     gas_type="N2",
                     power_percent=92.0,
                     speed_m_min=3.6,
@@ -122,7 +122,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]
                     trust_level=100,
                 ),
                 BaseMode(
-                    material_id=steel.id,
+                    material_id=stainless.id,
                     machine_id=machine.id,
                     thickness_mm=4.0,
                     gas_type="N2",
@@ -137,7 +137,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]
                     trust_level=100,
                 ),
                 BaseMode(
-                    material_id=steel.id,
+                    material_id=stainless.id,
                     machine_id=machine.id,
                     thickness_mm=6.0,
                     gas_type="N2",
@@ -164,9 +164,9 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]
 
 def _create_session(client: TestClient, **overrides: float | str) -> dict:
     payload = {
-        "machine_name": "Machine A",
-        "material_group": "steel",
-        "thickness_mm": 2.5,
+        "machine_name": "HSG_3kW_150mm_VSX_NC30E",
+        "material_group": "stainless",
+        "thickness_mm": 2.0,
         "gas_branch": "N2",
     }
     payload.update(overrides)
@@ -228,9 +228,9 @@ def test_create_session(client: TestClient) -> None:
     response = client.post(
         "/sessions",
         json={
-            "machine_name": "Machine A",
-            "material_group": "steel",
-            "thickness_mm": 2.5,
+            "machine_name": "HSG_3kW_150mm_VSX_NC30E",
+            "material_group": "stainless",
+            "thickness_mm": 2.0,
             "gas_branch": "N2",
         },
     )
@@ -238,10 +238,33 @@ def test_create_session(client: TestClient) -> None:
     assert response.status_code == 201
     body = response.json()
     assert body["id"] > 0
-    assert body["machine_name"] == "Machine A"
-    assert body["material_group"] == "steel"
-    assert body["thickness_mm"] == 2.5
+    assert body["machine_name"] == "HSG_3kW_150mm_VSX_NC30E"
+    assert body["material_group"] == "stainless"
+    assert body["thickness_mm"] == 2.0
     assert body["gas_branch"] == "N2"
+
+
+def test_list_thicknesses_dictionary(client: TestClient) -> None:
+    response = client.get(
+        "/dict/thicknesses",
+        params={
+            "machine_name": "HSG_3kW_150mm_VSX_NC30E",
+            "material_group": "stainless",
+            "gas_branch": "N2",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"value": 1.0, "label": "1 мм"},
+        {"value": 2.0, "label": "2 мм"},
+        {"value": 3.0, "label": "3 мм"},
+        {"value": 4.0, "label": "4 мм"},
+        {"value": 5.0, "label": "5 мм"},
+        {"value": 6.0, "label": "6 мм"},
+        {"value": 8.0, "label": "8 мм"},
+        {"value": 10.0, "label": "10 мм"},
+    ]
 
 
 def test_list_machines_dictionary(client: TestClient) -> None:
@@ -388,7 +411,7 @@ def test_unknown_defect_code_returns_client_error(client: TestClient) -> None:
 
 def test_get_base_mode_exact_match(client: TestClient) -> None:
     session = _create_session(
-        client, material_group="steel", gas_branch="N2", thickness_mm=2.5
+        client, material_group="stainless", gas_branch="N2", thickness_mm=2.0
     )
 
     response = client.get(f"/sessions/{session['id']}/base-mode")
@@ -408,7 +431,7 @@ def test_get_base_mode_exact_match(client: TestClient) -> None:
 
 def test_get_base_mode_falls_back_to_nearest_thickness(client: TestClient) -> None:
     session = _create_session(
-        client, material_group="steel", gas_branch="N2", thickness_mm=4.4
+        client, material_group="stainless", gas_branch="N2", thickness_mm=5.0
     )
 
     response = client.get(f"/sessions/{session['id']}/base-mode")
@@ -418,12 +441,12 @@ def test_get_base_mode_falls_back_to_nearest_thickness(client: TestClient) -> No
     assert body["power"] == 88.0
     assert body["speed"] == 3.1
     assert body["nozzle"] == 1.5
-    assert body["explanation"] == "Использована ближайшая толщина 4 мм вместо 4.4 мм"
+    assert body["explanation"] == "Использована ближайшая толщина 4 мм вместо 5 мм"
 
 
 def test_get_base_mode_no_match_returns_404(client: TestClient) -> None:
     session = _create_session(
-        client, material_group="aluminum", gas_branch="AIR", thickness_mm=1.0
+        client, material_group="aluminum", gas_branch="air", thickness_mm=1.0
     )
 
     response = client.get(f"/sessions/{session['id']}/base-mode")
@@ -436,8 +459,8 @@ def test_recommend_base_mode_returns_exact_match(client: TestClient) -> None:
     response = client.get(
         "/base-mode/recommend",
         params={
-            "machine_name": "Machine A",
-            "material_group": "steel",
+            "machine_name": "HSG_3kW_150mm_VSX_NC30E",
+            "material_group": "stainless",
             "gas_branch": "N2",
             "thickness_mm": 4.0,
         },
@@ -459,8 +482,8 @@ def test_recommend_base_mode_interpolates_values(client: TestClient) -> None:
     response = client.get(
         "/base-mode/recommend",
         params={
-            "machine_name": "Machine A",
-            "material_group": "steel",
+            "machine_name": "HSG_3kW_150mm_VSX_NC30E",
+            "material_group": "stainless",
             "gas_branch": "N2",
             "thickness_mm": 5.0,
         },
@@ -489,14 +512,44 @@ def test_invalid_thickness_rejected(client: TestClient) -> None:
     response = client.post(
         "/sessions",
         json={
-            "machine_name": "Machine A",
-            "material_group": "steel",
+            "machine_name": "HSG_3kW_150mm_VSX_NC30E",
+            "material_group": "stainless",
             "thickness_mm": 0,
             "gas_branch": "N2",
         },
     )
 
     assert response.status_code == 422
+
+
+def test_unlisted_thickness_rejected(client: TestClient) -> None:
+    response = client.post(
+        "/sessions",
+        json={
+            "machine_name": "HSG_3kW_150mm_VSX_NC30E",
+            "material_group": "stainless",
+            "thickness_mm": 2.5,
+            "gas_branch": "N2",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "thickness is not allowed"
+
+
+def test_session_creation_rejected_when_thickness_list_empty(client: TestClient) -> None:
+    response = client.post(
+        "/sessions",
+        json={
+            "machine_name": "UNKNOWN_MACHINE",
+            "material_group": "stainless",
+            "thickness_mm": 2.0,
+            "gas_branch": "N2",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "no allowed thicknesses for selected machine/material/gas"
 
 
 def test_rules_list_returns_seeded_rules(client: TestClient) -> None:
@@ -591,7 +644,7 @@ def test_recommendation_for_no_cut(client: TestClient) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["power_after"] == pytest.approx(1053.5)
+    assert body["power_after"] == pytest.approx(1038.8)
     assert body["speed_after"] == pytest.approx(10.465)
     assert body["frequency_after"] == 4800.0
     assert body["focus_after"] == 0.4
@@ -613,7 +666,7 @@ def test_recommendation_on_empty_session_with_body(client: TestClient) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["power_after"] == pytest.approx(1053.5)
+    assert body["power_after"] == pytest.approx(1038.8)
     assert body["speed_after"] == pytest.approx(10.465)
     assert body["frequency_after"] == 4800.0
     assert body["pressure_after"] == 7.5
@@ -659,7 +712,7 @@ def test_recommendation_uses_provided_defect_and_severity(client: TestClient) ->
 
     assert response.status_code == 200
     body = response.json()
-    assert body["power_after"] == pytest.approx(800.0)
+    assert body["power_after"] == pytest.approx(840.0)
     assert body["speed_after"] == 12.0
     assert "Applied power decrease (0.1) - rule from DB" in body["explanation"]
     assert "Severity level 3 applied multiplier x2" in body["explanation"]
@@ -690,7 +743,7 @@ def test_recommendation_for_burr(client: TestClient) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["power_after"] == pytest.approx(950.0)
+    assert body["power_after"] == pytest.approx(960.0)
     assert body["speed_after"] == pytest.approx(12.72)
     assert body["frequency_after"] == payload["frequency_after"]
     assert body["height_after"] == payload["height_after"]
@@ -719,7 +772,7 @@ def test_recommendation_respects_severity(client: TestClient) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["power_after"] == pytest.approx(800.0)
+    assert body["power_after"] == pytest.approx(840.0)
     assert body["frequency_after"] == second["frequency_after"]
 
 
@@ -761,8 +814,18 @@ def test_recommendation_differs_with_thickness_context(client: TestClient) -> No
 
 
 def test_recommendation_differs_with_gas_branch_context(client: TestClient) -> None:
-    o2_session = _create_session(client, gas_branch="O2")
-    n2_session = _create_session(client, gas_branch="N2")
+    o2_session = _create_session(
+        client,
+        material_group="carbon",
+        gas_branch="O2",
+        thickness_mm=4.0,
+    )
+    n2_session = _create_session(
+        client,
+        material_group="stainless",
+        gas_branch="N2",
+        thickness_mm=4.0,
+    )
 
     payload = _iteration_payload(
         defect_code="no_cut", severity_level=2, power_after=1000.0, speed_after=12.0
@@ -792,8 +855,12 @@ def test_recommendation_differs_with_gas_branch_context(client: TestClient) -> N
 
 
 def test_recommendation_differs_with_material_group_context(client: TestClient) -> None:
-    stainless_session = _create_session(client, material_group="stainless")
-    carbon_session = _create_session(client, material_group="carbon")
+    stainless_session = _create_session(
+        client, material_group="stainless", gas_branch="N2", thickness_mm=4.0
+    )
+    carbon_session = _create_session(
+        client, material_group="carbon", gas_branch="O2", thickness_mm=4.0
+    )
 
     payload = _iteration_payload(
         defect_code="overburn", severity_level=2, power_after=1000.0
