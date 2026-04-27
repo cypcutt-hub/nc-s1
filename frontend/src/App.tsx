@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
 
 type CutSessionCreate = {
   machine_name: string
@@ -69,6 +69,35 @@ type Recommendation = {
   explanation: string[]
 }
 
+type RuleParameter =
+  | 'power'
+  | 'speed'
+  | 'frequency'
+  | 'pressure'
+  | 'focus'
+  | 'height'
+  | 'duty_cycle'
+  | 'nozzle'
+
+type RuleDirection = 'increase' | 'decrease'
+
+type RecommendationRule = {
+  id: number
+  defect_code: string
+  parameter: RuleParameter
+  direction: RuleDirection
+  base_delta: number
+  is_active: boolean
+}
+
+type RecommendationRuleCreate = {
+  defect_code: string
+  parameter: RuleParameter
+  direction: RuleDirection
+  base_delta: number
+  is_active: boolean
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE_PATH ?? '/api'
 
 const MODE_KEYS: Array<keyof ModeVector> = [
@@ -83,6 +112,17 @@ const MODE_KEYS: Array<keyof ModeVector> = [
 ]
 
 const DEFECT_OPTIONS = ['burr', 'no_cut', 'overburn']
+const RULE_PARAMETER_OPTIONS: RuleParameter[] = [
+  'power',
+  'speed',
+  'frequency',
+  'pressure',
+  'focus',
+  'height',
+  'duty_cycle',
+  'nozzle',
+]
+const RULE_DIRECTION_OPTIONS: RuleDirection[] = ['increase', 'decrease']
 
 const DEFAULT_MODE: ModeVector = {
   power: 0,
@@ -120,6 +160,17 @@ export default function App() {
   const [message, setMessage] = useState<string | null>(null)
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null)
   const [recommendationCopied, setRecommendationCopied] = useState(false)
+  const [rules, setRules] = useState<RecommendationRule[]>([])
+  const [rulesLoading, setRulesLoading] = useState(false)
+  const [newRule, setNewRule] = useState<RecommendationRuleCreate>({
+    defect_code: DEFECT_OPTIONS[0],
+    parameter: RULE_PARAMETER_OPTIONS[0],
+    direction: RULE_DIRECTION_OPTIONS[0],
+    base_delta: 1,
+    is_active: true,
+  })
+  const [editingRuleId, setEditingRuleId] = useState<number | null>(null)
+  const [editRule, setEditRule] = useState<RecommendationRule | null>(null)
 
   const orderedIterations = useMemo(() => {
     if (!currentSession) return []
@@ -130,6 +181,29 @@ export default function App() {
     if (!recommendation) return []
     return MODE_KEYS.filter((key) => currentMode[key] !== recommendedMode[key])
   }, [currentMode, recommendedMode, recommendation])
+
+  useEffect(() => {
+    void loadRules()
+  }, [])
+
+  async function loadRules() {
+    setRulesLoading(true)
+    setError(null)
+
+    try {
+      const response = await fetch(`${API_BASE}/rules`)
+      if (!response.ok) {
+        throw new Error(await readError(response))
+      }
+
+      const data = (await response.json()) as RecommendationRule[]
+      setRules(data)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load rules')
+    } finally {
+      setRulesLoading(false)
+    }
+  }
 
   async function readError(response: Response): Promise<string> {
     try {
@@ -333,6 +407,144 @@ export default function App() {
     }
   }
 
+  async function createRule(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (newRule.base_delta <= 0) {
+      setError('base_delta must be greater than 0')
+      return
+    }
+
+    setRulesLoading(true)
+    setError(null)
+    setMessage(null)
+
+    try {
+      const response = await fetch(`${API_BASE}/rules`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newRule),
+      })
+
+      if (!response.ok) {
+        throw new Error(await readError(response))
+      }
+
+      const created = (await response.json()) as RecommendationRule
+      setRules((prev) => [...prev, created].sort((a, b) => a.id - b.id))
+      setMessage(`Rule #${created.id} created.`)
+      setNewRule({
+        defect_code: newRule.defect_code,
+        parameter: RULE_PARAMETER_OPTIONS[0],
+        direction: RULE_DIRECTION_OPTIONS[0],
+        base_delta: 1,
+        is_active: true,
+      })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to create rule')
+    } finally {
+      setRulesLoading(false)
+    }
+  }
+
+  function startEditRule(rule: RecommendationRule) {
+    setEditingRuleId(rule.id)
+    setEditRule({ ...rule })
+  }
+
+  function cancelEditRule() {
+    setEditingRuleId(null)
+    setEditRule(null)
+  }
+
+  async function saveRule(ruleId: number) {
+    if (!editRule || editRule.base_delta <= 0) {
+      setError('base_delta must be greater than 0')
+      return
+    }
+
+    setRulesLoading(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const response = await fetch(`${API_BASE}/rules/${ruleId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          parameter: editRule.parameter,
+          direction: editRule.direction,
+          base_delta: editRule.base_delta,
+          is_active: editRule.is_active,
+        }),
+      })
+      if (!response.ok) {
+        throw new Error(await readError(response))
+      }
+
+      const updated = (await response.json()) as RecommendationRule
+      setRules((prev) => prev.map((rule) => (rule.id === ruleId ? updated : rule)))
+      setEditingRuleId(null)
+      setEditRule(null)
+      setMessage(`Rule #${updated.id} saved.`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to update rule')
+    } finally {
+      setRulesLoading(false)
+    }
+  }
+
+  async function toggleRuleActive(rule: RecommendationRule) {
+    setRulesLoading(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const response = await fetch(`${API_BASE}/rules/${rule.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: !rule.is_active }),
+      })
+      if (!response.ok) {
+        throw new Error(await readError(response))
+      }
+
+      const updated = (await response.json()) as RecommendationRule
+      setRules((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
+      setMessage(`Rule #${updated.id} ${updated.is_active ? 'enabled' : 'disabled'}.`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to toggle rule status')
+    } finally {
+      setRulesLoading(false)
+    }
+  }
+
+  async function removeRule(rule: RecommendationRule) {
+    const shouldDelete = window.confirm(
+      `Delete rule #${rule.id} (${rule.defect_code} / ${rule.parameter})? This action cannot be undone.`,
+    )
+    if (!shouldDelete) return
+
+    setRulesLoading(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const response = await fetch(`${API_BASE}/rules/${rule.id}`, {
+        method: 'DELETE',
+      })
+      if (!response.ok) {
+        throw new Error(await readError(response))
+      }
+
+      setRules((prev) => prev.filter((item) => item.id !== rule.id))
+      setMessage(`Rule #${rule.id} deleted.`)
+      if (editingRuleId === rule.id) {
+        cancelEditRule()
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to delete rule')
+    } finally {
+      setRulesLoading(false)
+    }
+  }
+
   const updateMode = (
     setter: (value: ModeVector) => void,
     source: ModeVector,
@@ -349,6 +561,221 @@ export default function App() {
 
       {error && <p className="alert error">Error: {error}</p>}
       {message && <p className="alert success">{message}</p>}
+
+      <section className="card">
+        <h2>Algorithm rules</h2>
+        <p className="muted">Manage recommendation rules stored in DB.</p>
+        <div className="row">
+          <button type="button" onClick={loadRules} disabled={rulesLoading}>
+            Refresh rules
+          </button>
+        </div>
+
+        <h3>Create rule</h3>
+        <form onSubmit={createRule} className="grid rule-grid">
+          <label>
+            Defect code
+            <input
+              list="rule-defect-codes"
+              value={newRule.defect_code}
+              onChange={(event) => setNewRule({ ...newRule, defect_code: event.target.value })}
+              required
+            />
+            <datalist id="rule-defect-codes">
+              {DEFECT_OPTIONS.map((item) => (
+                <option key={`rule-${item}`} value={item} />
+              ))}
+            </datalist>
+          </label>
+          <label>
+            Parameter
+            <select
+              value={newRule.parameter}
+              onChange={(event) =>
+                setNewRule({ ...newRule, parameter: event.target.value as RuleParameter })
+              }
+              required
+            >
+              {RULE_PARAMETER_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Direction
+            <select
+              value={newRule.direction}
+              onChange={(event) =>
+                setNewRule({ ...newRule, direction: event.target.value as RuleDirection })
+              }
+              required
+            >
+              {RULE_DIRECTION_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Base delta
+            <input
+              type="number"
+              min="0.000001"
+              step="0.01"
+              value={newRule.base_delta}
+              onChange={(event) => setNewRule({ ...newRule, base_delta: Number(event.target.value) })}
+              required
+            />
+          </label>
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={newRule.is_active}
+              onChange={(event) => setNewRule({ ...newRule, is_active: event.target.checked })}
+            />
+            Active
+          </label>
+          <button type="submit" disabled={rulesLoading}>
+            Add rule
+          </button>
+        </form>
+
+        <h3>Rules</h3>
+        {rules.length === 0 ? (
+          <p className="muted">No rules loaded yet. Click “Refresh rules”.</p>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Defect</th>
+                  <th>Parameter</th>
+                  <th>Direction</th>
+                  <th>Base delta</th>
+                  <th>Active</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rules.map((rule) => {
+                  const isEditing = editingRuleId === rule.id && editRule !== null
+                  return (
+                    <tr key={rule.id}>
+                      <td>{rule.id}</td>
+                      <td>{rule.defect_code}</td>
+                      <td>
+                        {isEditing ? (
+                          <select
+                            value={editRule.parameter}
+                            onChange={(event) =>
+                              setEditRule({ ...editRule, parameter: event.target.value as RuleParameter })
+                            }
+                          >
+                            {RULE_PARAMETER_OPTIONS.map((option) => (
+                              <option key={`${rule.id}-${option}`} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          rule.parameter
+                        )}
+                      </td>
+                      <td>
+                        {isEditing ? (
+                          <select
+                            value={editRule.direction}
+                            onChange={(event) =>
+                              setEditRule({ ...editRule, direction: event.target.value as RuleDirection })
+                            }
+                          >
+                            {RULE_DIRECTION_OPTIONS.map((option) => (
+                              <option key={`${rule.id}-${option}`} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          rule.direction
+                        )}
+                      </td>
+                      <td>
+                        {isEditing ? (
+                          <input
+                            type="number"
+                            min="0.000001"
+                            step="0.01"
+                            value={editRule.base_delta}
+                            onChange={(event) =>
+                              setEditRule({ ...editRule, base_delta: Number(event.target.value) })
+                            }
+                          />
+                        ) : (
+                          rule.base_delta
+                        )}
+                      </td>
+                      <td>{isEditing ? (editRule.is_active ? 'yes' : 'no') : rule.is_active ? 'yes' : 'no'}</td>
+                      <td>
+                        <div className="button-group">
+                          {isEditing ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => saveRule(rule.id)}
+                                disabled={rulesLoading}
+                                className="ghost"
+                              >
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                onClick={cancelEditRule}
+                                disabled={rulesLoading}
+                                className="ghost"
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => startEditRule(rule)}
+                              disabled={rulesLoading}
+                              className="ghost"
+                            >
+                              Edit
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => toggleRuleActive(rule)}
+                            disabled={rulesLoading}
+                            className="ghost"
+                          >
+                            {rule.is_active ? 'Disable' : 'Enable'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeRule(rule)}
+                            disabled={rulesLoading}
+                            className="ghost danger"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       <section className="card">
         <h2>Create session</h2>
